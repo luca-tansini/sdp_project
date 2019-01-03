@@ -5,8 +5,12 @@ public class Model{
     private static Model instance;
 
     private Grid grid;
+    private Statistics stats;
 
-    private Model(){}
+    private Model(){
+        this.grid = new Grid(100,100);
+        this.stats = new Statistics();
+    }
 
     public synchronized static Model getInstance(){
         if(instance == null)
@@ -18,4 +22,7 @@ public class Model{
         return grid;
     }
 
+    public Statistics getStats() {
+        return stats;
+    }
 }

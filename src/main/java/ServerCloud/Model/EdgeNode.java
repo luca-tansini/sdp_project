@@ -1,14 +1,24 @@
 package ServerCloud.Model;
 
+import sun.security.x509.IPAddressName;
+
+import javax.xml.bind.annotation.XmlRootElement;
 import java.lang.Math;
 
-public class GridNode {
+@XmlRootElement
+public class EdgeNode {
 
     private int xPos;
     private int yPos;
     private int nodeId;
+    private String ipAddr;
+    private int sensorsPort;
+    private int nodesPort;
 
-    public GridNode(int xPos, int yPos, int nodeId) {
+
+    public EdgeNode(){}
+
+    public EdgeNode(int xPos, int yPos, int nodeId) {
         this.xPos = xPos;
         this.yPos = yPos;
         this.nodeId = nodeId;
@@ -30,8 +40,19 @@ public class GridNode {
         return Math.abs(xPos - this.xPos) + Math.abs(yPos - this.yPos);
     }
 
-    public  int getDistance(GridNode other){
+    public  int getDistance(EdgeNode other){
         return getDistance(other.getxPos(), other.getyPos());
     }
 
+    public String getIpAddr() {
+        return ipAddr;
+    }
+
+    public int getSensorsPort() {
+        return sensorsPort;
+    }
+
+    public int getNodesPort() {
+        return nodesPort;
+    }
 }

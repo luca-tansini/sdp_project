@@ -1,0 +1,12 @@
+operazioni da effettuare sul model:
+
+griglia:
+    - vedere lista nodi
+    - aggiungere nodo
+    - rimuovere nodo edge
+    - richiesta dei sensori del nodo più vicino
+
+statistiche:
+    - ricevere statistiche dal nodo coordinatore
+    - inviare le statistiche agli analisti
+    
