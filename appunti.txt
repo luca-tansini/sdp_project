@@ -1,12 +1,31 @@
 operazioni da effettuare sul model:
 
-griglia:
-    - vedere lista nodi
-    - aggiungere nodo
-    - rimuovere nodo edge
-    - richiesta dei sensori del nodo più vicino
+    griglia:
+        - vedere lista nodi
+        - aggiungere nodo
+        - rimuovere nodo edge
+        - richiesta dei sensori del nodo più vicino
 
-statistiche:
-    - ricevere statistiche dal nodo coordinatore
-    - inviare le statistiche agli analisti
-    
+    statistiche:
+        - ricevere statistiche dal nodo coordinatore
+        - inviare le statistiche agli analisti
+
+Come eseguire da terminale:
+
+    java $(cat exec-options) nome.della.classe argomenti ...
+
+Tipi di messaggi che arrivano sulla porta di comunicazione tra nodi edge:
+    - messaggi di WHOIS_COORD per quando un nuovo nodo chiede chi sia il coordinatore
+    - messaggi di ELECTION per le elezioni
+    - messaggi di STATS_UPDATE per inviare le proprie statistiche al coordinatore
+
+Cosa fa un nodo edge quando si inserisce nella griglia:
+
+    -riceve la lista di nodi edge dal server
+    -fa partire un thread per ricevere messaggi dai nodi:
+        questo thread inizializza un buffer condiviso su cui scrive i messaggi e fa partire un pool di N thread per gestirlo
+    -fa partire un thread per ricevere messaggi dai sensori
+    -se è da solo decide che è il coordinatore
+    -se non è da solo prova a chiedere a tutti i nodi della lista chi sia il coordinatore:
+        faccio un loop in cui finchè il coordinatore è null e ho nodi a cui chiedere mando messaggi,
+        quando finisco la lista mi metto in attesa (per al massimo x secondi). Se ricevo il messaggio dal coordinatore bene, altrimenti indico un'elezione.

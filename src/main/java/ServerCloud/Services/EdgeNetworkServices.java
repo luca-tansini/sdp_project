@@ -1,6 +1,6 @@
 package ServerCloud.Services;
 
-import ServerCloud.Model.EdgeNode;
+import ServerCloud.Model.EdgeNodeRepresentation;
 import ServerCloud.Model.Model;
 import ServerCloud.Model.Statistics;
 
@@ -17,17 +17,20 @@ public class EdgeNetworkServices {
         return Response.ok(Model.getInstance().getGrid().getNodes()).build();
     }
 
-    @Path("addnode")
+    @Path("nodes")
     @POST
     @Consumes({"application/json"})
     @Produces({"application/json"})
-    public Response addNode(EdgeNode node){
+    public Response addNode(EdgeNodeRepresentation node){
+        //DEBUG
+        System.out.println(node);
+        //END DEBUG
         try{
             Model.getInstance().getGrid().addNode(node);
         } catch (IllegalArgumentException e){
-            return  Response.status(Response.Status.BAD_REQUEST).entity("{\"error\":\""+e.getMessage()+"\"}").build();
+            return  Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
         }
-        return Response.ok(Model.getInstance().getGrid().getNodes()).build();
+        return Response.ok(Model.getInstance().getGrid().getNodeList()).build();
     }
 
     @Path("nodes/{id}")
@@ -36,7 +39,7 @@ public class EdgeNetworkServices {
         try{
             Model.getInstance().getGrid().removeNode(nodeId);
         } catch (IllegalArgumentException e){
-            return Response.status(Response.Status.BAD_REQUEST).entity("{\"error\":\""+e.getMessage()+"\"}").build();
+            return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
         }
         return Response.ok().build();
     }

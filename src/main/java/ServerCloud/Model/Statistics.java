@@ -33,6 +33,14 @@ public class Statistics {
         }
     }
 
+    public void setGlobal(ArrayList<Measurement> global) {
+        this.global = global;
+    }
+
+    public void setLocal(HashMap<Integer, ArrayList<Measurement>> local) {
+        this.local = local;
+    }
+
     public ArrayList<Measurement> getGlobal() {
         return global;
     }
