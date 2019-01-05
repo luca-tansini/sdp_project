@@ -71,6 +71,13 @@ public class EdgeNodeRepresentation {
         return nodesPort;
     }
 
+    @Override
+    public boolean equals(Object other){
+        if(other instanceof EdgeNodeRepresentation)
+            return this.nodeId == ((EdgeNodeRepresentation) other).nodeId;
+        else return false;
+    }
+
     public void setNodeId(int nodeId) {
         this.nodeId = nodeId;
     }

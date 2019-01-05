@@ -29,3 +29,5 @@ Cosa fa un nodo edge quando si inserisce nella griglia:
     -se non è da solo prova a chiedere a tutti i nodi della lista chi sia il coordinatore:
         faccio un loop in cui finchè il coordinatore è null e ho nodi a cui chiedere mando messaggi,
         quando finisco la lista mi metto in attesa (per al massimo x secondi). Se ricevo il messaggio dal coordinatore bene, altrimenti indico un'elezione.
+
+Le risposte agli STATS_UPDATE è meglio mandarli con i thread che leggono o col thread del coordinatore? secondo me è meglio col coordinatore.
