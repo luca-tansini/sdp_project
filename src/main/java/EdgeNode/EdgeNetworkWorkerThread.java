@@ -4,7 +4,6 @@ import EdgeNode.EdgeNetworkMessage.*;
 import ServerCloud.Model.EdgeNodeRepresentation;
 import com.google.gson.Gson;
 
-import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
 
@@ -27,12 +26,7 @@ public class EdgeNetworkWorkerThread extends Thread {
         while(!parent.isShutdown()){
 
             DatagramPacket packet = new DatagramPacket(buf, buf.length);
-            try {
-                socket.read(packet);
-            } catch (IOException e){
-                System.out.println("EdgeNetworkWorkerThread for EdgeNode"+parent.getNodeId()+" got IOException while reading:");
-                continue;
-            }
+            socket.read(packet);
             String json = new String(packet.getData(),0,packet.getLength());
 
             EdgeNetworkMessage msg = gson.fromJson(json, EdgeNetworkMessage.class);
@@ -75,12 +69,7 @@ public class EdgeNetworkWorkerThread extends Thread {
         EdgeNodeRepresentation requestingNode = coordRequestMessage.getRequestingNode();
         if(parent.isCoordinator()) {
             String jsonResponse = gson.toJson(new WhoisCoordResponseMessage(parent.getRepresentation()));
-            try {
-                socket.write(new DatagramPacket(jsonResponse.getBytes(), jsonResponse.length(), new InetSocketAddress(requestingNode.getIpAddr(), requestingNode.getNodesPort())));
-            } catch (IOException e){
-                System.out.println("EdgeNetworkWorkerThread for EdgeNode"+parent.getNodeId()+" got IOException while responding to WHOIS_COORD_REQUEST:");
-                e.printStackTrace();
-            }
+            socket.write(new DatagramPacket(jsonResponse.getBytes(), jsonResponse.length(), new InetSocketAddress(requestingNode.getIpAddr(), requestingNode.getNodesPort())));
         }
         if(!parent.getNodes().contains(requestingNode))
             parent.getNodes().add(requestingNode);
@@ -88,7 +77,6 @@ public class EdgeNetworkWorkerThread extends Thread {
 
     public void handleElectionMsg(String msg){
         ElectionMesssage electionMesssage = gson.fromJson(msg, ElectionMesssage.class);
-
 
         EdgeNodeRepresentation sender = electionMesssage.getSender();
         if(!parent.getNodes().contains(sender))
@@ -99,17 +87,14 @@ public class EdgeNetworkWorkerThread extends Thread {
             //Quando ricevo un pacchetto election il sender ha ID minore per forza, gli rispondo con un ALIVE_ACK e inizio un processo di elezione
             case ELECTION:
                 String response = gson.toJson(new ElectionMesssage(ElectionMesssage.ElectionMessageType.ALIVE_ACK, parent.getRepresentation()));
-                try {
-                    socket.write(new DatagramPacket(response.getBytes(), response.length(), new InetSocketAddress(sender.getIpAddr(), sender.getNodesPort())));
-                } catch (IOException e){
-                    System.out.println("EdgeNetworkWorkerThread for EdgeNode"+parent.getNodeId()+" got IOException while responding to ELECTION_MESSAGE:");
-                    e.printStackTrace();
-                }
+                socket.write(new DatagramPacket(response.getBytes(), response.length(), new InetSocketAddress(sender.getIpAddr(), sender.getNodesPort())));
+
                 synchronized (parent.getElectionStatusLock()){
                     if(parent.getElectionStatus() != EdgeNode.ElectionStatus.FINISHED)
                         break;
                     parent.setElectionStatus(EdgeNode.ElectionStatus.STARTED);
                 }
+                System.out.println("DEBUG: ho ricevuto pacchetto election, faccio partire elezione da WorkerThread");
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
@@ -133,7 +118,7 @@ public class EdgeNetworkWorkerThread extends Thread {
                     parent.setElectionStatus(EdgeNode.ElectionStatus.FINISHED);
                 }
                 parent.setCoordinator(sender);
-                parent.setAwaitingACK(false);
+                parent.setAwaitingCoordinatorACK(false);
                 break;
         }
     }
@@ -149,7 +134,7 @@ public class EdgeNetworkWorkerThread extends Thread {
                 break;
 
             case ACK:
-                parent.setAwaitingACK(false);
+                parent.setAwaitingCoordinatorACK(false);
                 break;
         }
 

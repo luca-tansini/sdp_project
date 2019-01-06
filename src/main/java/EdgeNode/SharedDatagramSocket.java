@@ -16,15 +16,25 @@ public class SharedDatagramSocket {
         writeLock = new Object();
     }
 
-    public void read(DatagramPacket packet) throws IOException {
+    public void read(DatagramPacket packet) {
         synchronized (readLock){
-            this.socket.receive(packet);
+            try {
+                this.socket.receive(packet);
+            } catch (IOException e){
+                System.out.println("socket error in receive:");
+                e.printStackTrace();
+            }
         }
     }
 
-    public void write(DatagramPacket packet) throws IOException{
+    public void write(DatagramPacket packet) {
         synchronized (writeLock){
-            this.socket.send(packet);
+            try {
+                this.socket.send(packet);
+            } catch (IOException e){
+                System.out.println("socket error sending packet: "+new String(packet.getData(), 0, packet.getLength()));
+                e.printStackTrace();
+            }
         }
     }
 

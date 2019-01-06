@@ -10,7 +10,6 @@ import com.google.gson.Gson;
 import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
-import com.sun.xml.internal.bind.v2.runtime.Coordinator;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -24,7 +23,6 @@ public class EdgeNode{
 
     private static final int THREAD_POOL_SIZE = 5;
 
-
     private int xPos;
     private int yPos;
     private int nodeId;
@@ -33,7 +31,7 @@ public class EdgeNode{
     private int nodesPort;
 
     //TODO: sincronizzare nodes
-    private ArrayList<EdgeNodeRepresentation> nodes;
+    private SharedNodeList nodes;
     private EdgeNodeRepresentation representation;
 
     private volatile EdgeNodeRepresentation coordinator;
@@ -41,7 +39,9 @@ public class EdgeNode{
     private SharedBuffer<CoordinatorMessage> coordinatorBuffer;
 
     private Thread sensorThread;
-    private boolean awaitingACK;
+    private boolean awaitingCoordinatorACK;
+    //TODO: E' davvero necessario?
+    private final Object coordinatorACKLock = new Object();
 
     private SharedDatagramSocket edgeNetworkSocket;
     private EdgeNetworkWorkerThread edgeNetworkThreadPool[];
@@ -82,7 +82,7 @@ public class EdgeNode{
             else {
                 EdgeNode node = new EdgeNode(nodeRepr);
                 NodeList nodes = response.getEntity(NodeList.class);
-                node.nodes = nodes.getNodes();
+                node.nodes = new SharedNodeList(nodes.getNodes());
                 //Toglie se stesso dalla lista di nodi
                 node.nodes.remove(node.getRepresentation());
                 node.startWork();
@@ -110,29 +110,25 @@ public class EdgeNode{
                 EdgeNodeRepresentation node = this.nodes.get(i);
                 String request = new Gson().toJson(new WhoisCoordRequestMessage(this.getRepresentation()));
                 DatagramPacket packet = new DatagramPacket(request.getBytes(), request.length(), new InetSocketAddress(node.getIpAddr(), node.getNodesPort()));
-                try {
-                    this.edgeNetworkSocket.write(packet);
-                } catch (IOException e){
-                    System.out.println("Main thread got IOException while asking EdgeNode"+node.getNodeId()+" for coordinator info:");
-                    e.printStackTrace();
-                }
+                this.edgeNetworkSocket.write(packet);
                 i++;
             }
 
             if(this.coordinator == null) {
-                //Timeout di 2 secondi per aspettare risposte poi elezione
-                try { Thread.sleep(2000); } catch (InterruptedException e) { e.printStackTrace();}
+                //Timeout di 1 secondo per aspettare risposte poi elezione
+                try { Thread.sleep(1000); } catch (InterruptedException e) { e.printStackTrace();}
                 if (this.coordinator == null) {
+                    System.out.println("DEBUG: il coordinatore non ha risposto ai miei pacchetti WHOIS_COORD");
                     //Controlla che non sia già stata iniziata un'elezione da qualcuno
                     boolean alreadyStarted = false;
                     synchronized (this.electionStatusLock){
-                        if(this.electionStatus == null)
+                        if(this.electionStatus == ElectionStatus.FINISHED)
                             this.electionStatus = ElectionStatus.STARTED;
                         else
                             alreadyStarted = true;
                     }
                     if(!alreadyStarted){
-                        System.out.println("Starting election from main");
+                        System.out.println("DEBUG: Starting election from main");
                         bullyElection();
                     }
                 }
@@ -147,11 +143,7 @@ public class EdgeNode{
 
         //Loop di attesa
         System.out.println("press a key to stop");
-        try {
-            System.in.read();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        try {System.in.read();} catch (IOException e) {e.printStackTrace();}
         System.out.println("stopping...");
         this.shutdown = true;
         for(EdgeNetworkWorkerThread t: this.edgeNetworkThreadPool)
@@ -162,7 +154,10 @@ public class EdgeNode{
             this.sensorThread.stop();
         this.edgeNetworkSocket.close();
 
-        //TODO: Manda al server la notifica di stop
+        //Manda al server la notifica di stop
+        Client client = Client.create();
+        WebResource webResource = client.resource("http://localhost:4242/edgenetwork/nodes/"+this.nodeId);
+        webResource.type("application/json").delete(ClientResponse.class);
     }
 
     /*
@@ -174,7 +169,6 @@ public class EdgeNode{
         try{
             DatagramSocket datagramSocket = new DatagramSocket(this.getNodesPort());
             this.edgeNetworkSocket = new SharedDatagramSocket(datagramSocket);
-
         } catch (SocketException e){
             System.out.println("error: couldn't create socket on specified nodesPort:"+this.getNodesPort());
             System.exit(-1);
@@ -188,8 +182,16 @@ public class EdgeNode{
         }
     }
 
-    public void setAwaitingACK(boolean awaitingACK) {
-        this.awaitingACK = awaitingACK;
+    public boolean isAwaitingCoordinatorACK() {
+        synchronized (coordinatorACKLock) {
+            return awaitingCoordinatorACK;
+        }
+    }
+
+    public void setAwaitingCoordinatorACK(boolean awaitingCoordinatorACK) {
+        synchronized (coordinatorACKLock) {
+            this.awaitingCoordinatorACK = awaitingCoordinatorACK;
+        }
     }
 
     /*
@@ -213,26 +215,32 @@ public class EdgeNode{
 
                 while (true){
                     try {
-                        System.out.println("Sensors thread is sending STATS_UPDATE: random message from "+nodeId);
-                        CoordinatorMessage coordinatorMessage = new CoordinatorMessage(CoordinatorMessage.CoordinatorMessageType.STATS_UPDATE, getRepresentation(), "random message from "+nodeId);
-                        String json = gson.toJson(coordinatorMessage, CoordinatorMessage.class);
-                        edgeNetworkSocket.write(new DatagramPacket(json.getBytes(), json.length(), new InetSocketAddress(coordinator.getIpAddr(), coordinator.getNodesPort())));
-                        awaitingACK = true;
+                        //Se il coordinatore non è definito (può succedere solo all'inizio in effetti) non fa nulla TODO: migliorare situazione
+                        if(getCoordinator() != null) {
+                            System.out.println("Sensors thread is sending STATS_UPDATE: random message from " + nodeId);
+                            CoordinatorMessage coordinatorMessage = new CoordinatorMessage(CoordinatorMessage.CoordinatorMessageType.STATS_UPDATE, getRepresentation(), "random message from " + nodeId);
+                            String json = gson.toJson(coordinatorMessage, CoordinatorMessage.class);
+                            edgeNetworkSocket.write(new DatagramPacket(json.getBytes(), json.length(), new InetSocketAddress(coordinator.getIpAddr(), coordinator.getNodesPort())));
+                            setAwaitingCoordinatorACK(true);
+                        }
                         Thread.sleep(5000);
-                        if(awaitingACK == true){
-                            System.out.println("Il coordinatore è morto!");
-                            //TODO: fai partire elezione
-                            awaitingACK = false;
+                        if(isAwaitingCoordinatorACK()){
+                            System.out.println("DEBUG: Il coordinatore è morto!");
+                            //Rimuove il vecchio coordinatore dalla lista dei nodi attivi
+                            setCoordinator(null);
+                            getNodes().remove(getCoordinator());
+                            setAwaitingCoordinatorACK(false);
                             synchronized (getElectionStatusLock()){
                                 if(getElectionStatus() != EdgeNode.ElectionStatus.FINISHED)
                                     continue;
                                 setElectionStatus(EdgeNode.ElectionStatus.STARTED);
                             }
-                            System.out.println("Sensor thread: faccio partire elezione");
+                            System.out.println("DEBUG: Sensor thread: faccio partire elezione");
                             bullyElection();
                         }
                     } catch (Exception e){
                         e.printStackTrace();
+                        try {Thread.sleep(1000);} catch (InterruptedException e1) {e1.printStackTrace();}
                     }
                 }
             }
@@ -260,7 +268,8 @@ public class EdgeNode{
 
     /*
      * Bully election algorithm (based on ID)
-     * Sono sicuro che se esco da questo metodo ho un coordinatore (sicuro?)
+     * Sono sicuro che se esco da questo metodo ho un coordinatore
+     * Questo medoto viene eseguito da al più un solo thread alla volta, è garantito da electionStatus che è atomica
      */
     public void bullyElection(){
 
@@ -273,18 +282,15 @@ public class EdgeNode{
         //Manda pacchetti ELECTION agli ID maggiori (e li salva in higherId)
         for(EdgeNodeRepresentation e: this.nodes){
             if(e.getNodeId() > this.getNodeId()){
+                System.out.println("DEBUG: mando pacchetto al nodo: "+e.getNodeId());
                 higherId.add(e);
-                try{
-                    this.edgeNetworkSocket.write(new DatagramPacket(electionMsg.getBytes(), electionMsg.length(), new InetSocketAddress(e.getIpAddr(), e.getNodesPort())));
-                } catch (IOException exc) {
-                    System.out.println("Main thread got IOException while sending EdgeNode"+e.getNodeId()+" an ELECTION package:");
-                    exc.printStackTrace();
-                }
+                this.edgeNetworkSocket.write(new DatagramPacket(electionMsg.getBytes(), electionMsg.length(), new InetSocketAddress(e.getIpAddr(), e.getNodesPort())));
             }
         }
 
         //Se nessuno ha id maggiore ho vinto automaticamente
         if(higherId.size() == 0){
+            System.out.println("DEBUG: nessuno ha id maggiore del mio, sono io il coordinatore, mando i pacchetti VICTORY");
             synchronized (this.electionStatusLock){
                 this.electionStatus = ElectionStatus.WON;
             }
@@ -296,12 +302,7 @@ public class EdgeNode{
             //Manda in giro pacchetti VICTORY
             String victoryMsg = new Gson().toJson(new ElectionMesssage(ElectionMesssage.ElectionMessageType.VICTORY, this.getRepresentation()));
             for (EdgeNodeRepresentation e: this.nodes){
-                try {
-                    this.edgeNetworkSocket.write(new DatagramPacket(victoryMsg.getBytes(), victoryMsg.length(), new InetSocketAddress(e.getIpAddr(), e.getNodesPort())));
-                } catch (IOException exc) {
-                    System.out.println("Main thread got IOException while sending EdgeNode"+e.getNodeId()+" a VICTORY package:");
-                    exc.printStackTrace();
-                }
+                this.edgeNetworkSocket.write(new DatagramPacket(victoryMsg.getBytes(), victoryMsg.length(), new InetSocketAddress(e.getIpAddr(), e.getNodesPort())));
             }
 
             synchronized (this.electionStatusLock){
@@ -310,20 +311,24 @@ public class EdgeNode{
             // Se il sensorThread stava aspettando una risposta e
             // siamo entrati qui dentro non per merito suo,
             // lo facciamo passare oltre
-            this.awaitingACK = false;
+            setAwaitingCoordinatorACK(false);
             return;
         }
         else{
             //Aspetto 2 secondi
+            System.out.println("DEBUG: attendo risposte");
             try { Thread.sleep(2000); } catch (InterruptedException e) { e.printStackTrace();}
 
             synchronized (this.electionStatusLock){
                 //Se l'elezione è finita ho ricevuto un VICTORY packet e qualcuno sarà il coordinatore
-                if(this.electionStatus == ElectionStatus.FINISHED)
+                if(this.electionStatus == ElectionStatus.FINISHED) {
+                    System.out.println("DEBUG: l'elezione è finita: devo aver ricevuto dei pacchetti VICTORY. Il nuovo coordinatore è: "+this.coordinator);
                     return;
+                }
 
                 //Se non ho ricevuto nemmeno un ACK per due secondi posso assumere che siano tutti morti
                 if(this.electionStatus == ElectionStatus.STARTED){
+                    System.out.println("DEBUG: non ho ricevuto notizie da nessuno, assumo che tutti quelli che ho contattato siano morti e ricomincio");
                     failed = true;
                 }
             }
@@ -337,17 +342,18 @@ public class EdgeNode{
             }
 
             //Se invece ho ricevuto un ACK da qualcuno con id superiore al mio aspetto altri 5 secondi
-            synchronized (this.electionStatusLock){
-                this.electionStatus = ElectionStatus.TAKEN_CARE;
-            }
+            System.out.println("Ho ricevuto ALIVE_ACK da qualcuno di superiore aspetto altri 5 secondi");
             try { Thread.sleep(5000); } catch (InterruptedException e) { e.printStackTrace();}
 
             //Se dopo i 5 secondi l'elezione non è finita vuol dire che qualcuno è morto dopo aver mandato un ACK, ricomincio
             synchronized (this.electionStatusLock){
-                if(this.electionStatus == ElectionStatus.FINISHED)
+                if(this.electionStatus == ElectionStatus.FINISHED){
+                    System.out.println("DEBUG: dopo i 5 ho ricevuto dei pacchetti VICTORY");
                     return;
+                }
                 this.electionStatus = ElectionStatus.STARTED;
             }
+            System.out.println("DEBUG: qualcuno deve essere morto dopo aver mandato un ALIVE_ACK, ricomincio");
             bullyElection();
         }
     }
@@ -357,9 +363,7 @@ public class EdgeNode{
      * Lancia il thread che si occupa di raccogliere le statistiche e mandarle al server
      */
     public void startCoordinatorWork(){
-
         this.coordinatorBuffer = new SharedBuffer<CoordinatorMessage>();
-
         this.coordinatorThread = new CoordinatorThread(this, this.coordinatorBuffer, this.edgeNetworkSocket);
         this.coordinatorThread.start();
     }
@@ -382,7 +386,7 @@ public class EdgeNode{
         shutdown = false;
     }
 
-    public ArrayList<EdgeNodeRepresentation> getNodes() {
+    public SharedNodeList getNodes() {
         return nodes;
     }
 

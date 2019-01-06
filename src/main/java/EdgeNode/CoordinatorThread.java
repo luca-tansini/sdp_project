@@ -35,12 +35,7 @@ public class CoordinatorThread extends Thread{
 
             CoordinatorMessage response = new CoordinatorMessage(CoordinatorMessage.CoordinatorMessageType.ACK, parent.getRepresentation(), "ACK");
             String json = gson.toJson(response, CoordinatorMessage.class);
-            try {
-                socket.write(new DatagramPacket(json.getBytes(), json.length(), new InetSocketAddress(msg.getSender().getIpAddr(), msg.getSender().getNodesPort())));
-            } catch (IOException e) {
-                System.out.println("Coordinator thread got IOException while sending ACK to EdgeNode"+msg.getSender().getNodeId());
-                e.printStackTrace();
-            }
+            socket.write(new DatagramPacket(json.getBytes(), json.length(), new InetSocketAddress(msg.getSender().getIpAddr(), msg.getSender().getNodesPort())));
         }
 
     }
