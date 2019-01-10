@@ -33,12 +33,12 @@ public class EdgeNetworkWorkerThread extends Thread {
 
             switch (msg.getType()){
 
-                case WHOIS_COORD_RESPONSE:
-                    handleCoordResponse(json);
+                case HELLO:
+                    handleHelloRequest(json);
                     break;
 
-                case WHOIS_COORD_REQUEST:
-                    handleCoordRequest(json);
+                case HELLO_RESPONSE:
+                    handleHelloResponse(json);
                     break;
 
                 case ELECTION:
@@ -56,45 +56,55 @@ public class EdgeNetworkWorkerThread extends Thread {
         }
     }
 
-    public void handleCoordResponse(String msg){
-        WhoisCoordResponseMessage coordResponseMessage = gson.fromJson(msg, WhoisCoordResponseMessage.class);
-        EdgeNodeRepresentation newCoord = coordResponseMessage.getCoordinator();
-        parent.setCoordinator(newCoord);
-        if(!parent.getNodes().contains(newCoord))
-            parent.getNodes().add(newCoord);
-    }
-
-    public void handleCoordRequest(String msg){
-        WhoisCoordRequestMessage coordRequestMessage = gson.fromJson(msg, WhoisCoordRequestMessage.class);
-        EdgeNodeRepresentation requestingNode = coordRequestMessage.getRequestingNode();
-        if(parent.isCoordinator()) {
-            String jsonResponse = gson.toJson(new WhoisCoordResponseMessage(parent.getRepresentation()));
-            socket.write(new DatagramPacket(jsonResponse.getBytes(), jsonResponse.length(), new InetSocketAddress(requestingNode.getIpAddr(), requestingNode.getNodesPort())));
-        }
+    public void handleHelloRequest(String msg){
+        HelloMessage helloMessage = gson.fromJson(msg, HelloMessage.class);
+        EdgeNodeRepresentation requestingNode = helloMessage.getRequestingNode();
         if(!parent.getNodes().contains(requestingNode))
             parent.getNodes().add(requestingNode);
+        else{
+            //Caso limite in cui qualcuno è morto e risorto prima che me ne rendessi conto
+            parent.getNodes().addSafety(requestingNode);
+        }
+        if(parent.isCoordinator()) {
+            String jsonResponse = gson.toJson(new HelloResponseMessage(parent.getRepresentation()));
+            socket.write(new DatagramPacket(jsonResponse.getBytes(), jsonResponse.length(), new InetSocketAddress(requestingNode.getIpAddr(), requestingNode.getNodesPort())));
+        }
+    }
+
+    public void handleHelloResponse(String msg){
+        HelloResponseMessage coordResponseMessage = gson.fromJson(msg, HelloResponseMessage.class);
+        EdgeNodeRepresentation coord = coordResponseMessage.getCoordinator();
+        Object lock = parent.getHelloSequenceLock();
+        synchronized (lock) {
+            if (coord != null) {
+                parent.setCoordinator(coord);
+                lock.notify();
+            }
+        }
     }
 
     public void handleElectionMsg(String msg){
         ElectionMesssage electionMesssage = gson.fromJson(msg, ElectionMesssage.class);
 
         EdgeNodeRepresentation sender = electionMesssage.getSender();
-        if(!parent.getNodes().contains(sender))
-            parent.getNodes().add(sender);
 
-        switch (electionMesssage.getElectionMessageType()){
+        switch (electionMesssage.getElectionMessageType()) {
 
-            //Quando ricevo un pacchetto election il sender ha ID minore per forza, gli rispondo con un ALIVE_ACK e inizio un processo di elezione
             case ELECTION:
                 String response = gson.toJson(new ElectionMesssage(ElectionMesssage.ElectionMessageType.ALIVE_ACK, parent.getRepresentation()));
                 socket.write(new DatagramPacket(response.getBytes(), response.length(), new InetSocketAddress(sender.getIpAddr(), sender.getNodesPort())));
-
-                synchronized (parent.getElectionStatusLock()){
-                    if(parent.getElectionStatus() != EdgeNode.ElectionStatus.FINISHED)
+                synchronized (parent.getElectionStatusLock()) {
+                    if (parent.getElectionStatus() != EdgeNode.ElectionStatus.FINISHED)
                         break;
                     parent.setElectionStatus(EdgeNode.ElectionStatus.STARTED);
                 }
                 System.out.println("DEBUG: ho ricevuto pacchetto election, faccio partire elezione da WorkerThread");
+                //gestione della helloSequence
+                synchronized (parent.getHelloSequenceLock()) {
+                    parent.getHelloSequenceLock().notify();
+                }
+                parent.setAwaitingCoordinatorACK(false);
+                parent.setCoordinator(null);
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
@@ -105,20 +115,31 @@ public class EdgeNetworkWorkerThread extends Thread {
 
             //Quando ricevo un pacchetto ACK, mi metto in stato TAKEN_CARE, se non lo ero già. Non posso riceverne da nodi sconosciuti
             case ALIVE_ACK:
-                synchronized (parent.getElectionStatusLock()){
-                    if(parent.getElectionStatus() != EdgeNode.ElectionStatus.STARTED)
+                synchronized (parent.getElectionStatusLock()) {
+                    if (parent.getElectionStatus() != EdgeNode.ElectionStatus.STARTED)
                         break;
                     parent.setElectionStatus(EdgeNode.ElectionStatus.TAKEN_CARE);
+                }
+                synchronized (parent.getElectionLock()){
+                    parent.getElectionLock().notify();
                 }
                 break;
 
             //Quando ricevo un pacchetto VICTORY posso assumere che sia finita un'elezione e mi segno il nuovo coordinatore.
             case VICTORY:
+                System.out.println("DEBUG: EdgeNetworkWokerThread ho ricevuto pacchetto VICTORY");
                 synchronized (parent.getElectionStatusLock()){
                     parent.setElectionStatus(EdgeNode.ElectionStatus.FINISHED);
                 }
                 parent.setCoordinator(sender);
                 parent.setAwaitingCoordinatorACK(false);
+                synchronized (parent.getElectionLock()) {
+                    parent.getElectionLock().notify();
+                }
+                //gestione della helloSequence
+                synchronized (parent.getHelloSequenceLock()){
+                    parent.getHelloSequenceLock().notify();
+                }
                 break;
         }
     }

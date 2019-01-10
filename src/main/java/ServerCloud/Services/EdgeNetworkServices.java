@@ -22,14 +22,12 @@ public class EdgeNetworkServices {
     @Consumes({"application/json"})
     @Produces({"application/json"})
     public Response addNode(EdgeNodeRepresentation node){
-        //DEBUG
-        System.out.println("ADD: "+node);
-        //END DEBUG
         try{
             Model.getInstance().getGrid().addNode(node);
         } catch (IllegalArgumentException e){
             return  Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
         }
+        System.out.println("ADD: "+node);
         return Response.ok(Model.getInstance().getGrid().getNodeList()).build();
     }
 

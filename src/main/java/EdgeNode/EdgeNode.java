@@ -2,7 +2,7 @@ package EdgeNode;
 
 import EdgeNode.EdgeNetworkMessage.CoordinatorMessage;
 import EdgeNode.EdgeNetworkMessage.ElectionMesssage;
-import EdgeNode.EdgeNetworkMessage.WhoisCoordRequestMessage;
+import EdgeNode.EdgeNetworkMessage.HelloMessage;
 import ServerCloud.Model.EdgeNodeRepresentation;
 import ServerCloud.Model.Grid;
 import ServerCloud.Model.NodeList;
@@ -30,25 +30,18 @@ public class EdgeNode{
     private int sensorsPort;
     private int nodesPort;
 
-    //TODO: sincronizzare nodes
     private SharedNodeList nodes;
     private EdgeNodeRepresentation representation;
 
-    private volatile EdgeNodeRepresentation coordinator;
+    private EdgeNodeRepresentation coordinator;
+    private final Object coordinatorLock = new Object();
     private CoordinatorThread coordinatorThread;
     private SharedBuffer<CoordinatorMessage> coordinatorBuffer;
-
-    private Thread sensorThread;
-    private boolean awaitingCoordinatorACK;
-    //TODO: E' davvero necessario?
-    private final Object coordinatorACKLock = new Object();
 
     private SharedDatagramSocket edgeNetworkSocket;
     private EdgeNetworkWorkerThread edgeNetworkThreadPool[];
 
     private volatile boolean shutdown;
-    private ElectionStatus electionStatus = ElectionStatus.FINISHED;
-    private final Object electionStatusLock = new Object();
 
     public static void main(String args[]){
 
@@ -97,55 +90,23 @@ public class EdgeNode{
     private void startWork(){
 
         startEdgeNetworkCommunication();
+        startSensorsManagement();
 
         if(nodes.size() == 0){
-            this.coordinator = this.getRepresentation();
+            this.setCoordinator(this.getRepresentation());
             System.out.println("self proclaimed coordinator");
             startCoordinatorWork();
         }
         else{
-            //Chiedo chi è il coordinatore a tutti gli altri nodi
-            int i = 0;
-            while(this.coordinator == null && i < this.nodes.size()) {
-                EdgeNodeRepresentation node = this.nodes.get(i);
-                String request = new Gson().toJson(new WhoisCoordRequestMessage(this.getRepresentation()));
-                DatagramPacket packet = new DatagramPacket(request.getBytes(), request.length(), new InetSocketAddress(node.getIpAddr(), node.getNodesPort()));
-                this.edgeNetworkSocket.write(packet);
-                i++;
-            }
-
-            if(this.coordinator == null) {
-                //Timeout di 1 secondo per aspettare risposte poi elezione
-                try { Thread.sleep(1000); } catch (InterruptedException e) { e.printStackTrace();}
-                if (this.coordinator == null) {
-                    System.out.println("DEBUG: il coordinatore non ha risposto ai miei pacchetti WHOIS_COORD");
-                    //Controlla che non sia già stata iniziata un'elezione da qualcuno
-                    boolean alreadyStarted = false;
-                    synchronized (this.electionStatusLock){
-                        if(this.electionStatus == ElectionStatus.FINISHED)
-                            this.electionStatus = ElectionStatus.STARTED;
-                        else
-                            alreadyStarted = true;
-                    }
-                    if(!alreadyStarted){
-                        System.out.println("DEBUG: Starting election from main");
-                        bullyElection();
-                    }
-                }
-                else{
-                    System.out.println("Got coordinator info: "+this.coordinator);
-                }
-            }
+            helloSequence();
         }
 
-        //TODO: is it safe to put this here?
-        startSensorsManagement();
-
-        //Loop di attesa
+        //Loop di attesa interruzione
         System.out.println("press a key to stop");
         try {System.in.read();} catch (IOException e) {e.printStackTrace();}
         System.out.println("stopping...");
         this.shutdown = true;
+        //TODO: dovrei gestire questa cosa con gli shutdown. Ma i thread in attesa sulle socket?
         for(EdgeNetworkWorkerThread t: this.edgeNetworkThreadPool)
             t.stop();
         if(this.isCoordinator() && this.coordinatorThread != null)
@@ -160,8 +121,45 @@ public class EdgeNode{
         webResource.type("application/json").delete(ClientResponse.class);
     }
 
+    //HELLO SEQUENCE MANAGEMENT
+    private final Object helloSequenceLock = new Object();
+
+    public Object getHelloSequenceLock() {
+        return helloSequenceLock;
+    }
+
+    private void helloSequence(){
+        //Mando pachetti HELLO a tutti gli altri nodi
+        for(EdgeNodeRepresentation node: this.nodes){
+            String request = new Gson().toJson(new HelloMessage(this.getRepresentation()));
+            DatagramPacket packet = new DatagramPacket(request.getBytes(), request.length(), new InetSocketAddress(node.getIpAddr(), node.getNodesPort()));
+            this.edgeNetworkSocket.write(packet);
+        }
+        synchronized (this.helloSequenceLock){
+            try {this.helloSequenceLock.wait(15000);} catch(InterruptedException e){e.printStackTrace();}
+        }
+        if(this.getCoordinator() != null){
+            //Qualcuno mi ha detto di essere il coordinatore
+            System.out.println("DEBUG: HelloSequence got coordinator info: "+this.coordinator);
+        }
+        else{
+            synchronized (getElectionStatusLock()) {
+                if (this.getElectionStatus() != ElectionStatus.FINISHED) {
+                    //Sono stato coinvolto in un'elezione
+                    System.out.println("DEBUG: HelloSequence into election");
+                    return;
+                }
+                //Non ho ricevuto niente da nessuno, faccio partire una mia elezione, alla peggio contatto nodi già in un'elezione e mi manderanno un ACK
+                System.out.println("DEBUG: HelloSequence is startin election after 15 seconds");
+                setElectionStatus(ElectionStatus.STARTED);
+                bullyElection();
+            }
+        }
+    }
+
+
     /*
-     * Crea la socket per la comunicazione sulla EdgeNetwork e
+     * Crea la socket UDP per la comunicazione sulla EdgeNetwork e
      * inizializza il thread pool
      */
     private void startEdgeNetworkCommunication(){
@@ -181,6 +179,11 @@ public class EdgeNode{
             this.edgeNetworkThreadPool[i].start();
         }
     }
+
+    private Thread sensorThread;
+    private boolean awaitingCoordinatorACK;
+    private final Object coordinatorACKLock = new Object();
+
 
     public boolean isAwaitingCoordinatorACK() {
         synchronized (coordinatorACKLock) {
@@ -206,53 +209,17 @@ public class EdgeNode{
         //TODO: Crea il pool di thread per gestirli
 
         //TODO: Lancia il thread che raccoglie i dati e li manda al coordinatore. SUPER DUMMY, se li manda anche da solo
-        this.sensorThread = new Thread(new Runnable() {
-
-            @Override
-            public void run() {
-
-                Gson gson = new Gson();
-
-                while (true){
-                    try {
-                        //Se il coordinatore non è definito (può succedere solo all'inizio in effetti) non fa nulla TODO: migliorare situazione
-                        if(getCoordinator() != null) {
-                            System.out.println("Sensors thread is sending STATS_UPDATE: random message from " + nodeId);
-                            CoordinatorMessage coordinatorMessage = new CoordinatorMessage(CoordinatorMessage.CoordinatorMessageType.STATS_UPDATE, getRepresentation(), "random message from " + nodeId);
-                            String json = gson.toJson(coordinatorMessage, CoordinatorMessage.class);
-                            edgeNetworkSocket.write(new DatagramPacket(json.getBytes(), json.length(), new InetSocketAddress(coordinator.getIpAddr(), coordinator.getNodesPort())));
-                            setAwaitingCoordinatorACK(true);
-                        }
-                        Thread.sleep(5000);
-                        if(isAwaitingCoordinatorACK()){
-                            System.out.println("DEBUG: Il coordinatore è morto!");
-                            //Rimuove il vecchio coordinatore dalla lista dei nodi attivi
-                            setCoordinator(null);
-                            getNodes().remove(getCoordinator());
-                            setAwaitingCoordinatorACK(false);
-                            synchronized (getElectionStatusLock()){
-                                if(getElectionStatus() != EdgeNode.ElectionStatus.FINISHED)
-                                    continue;
-                                setElectionStatus(EdgeNode.ElectionStatus.STARTED);
-                            }
-                            System.out.println("DEBUG: Sensor thread: faccio partire elezione");
-                            bullyElection();
-                        }
-                    } catch (Exception e){
-                        e.printStackTrace();
-                        try {Thread.sleep(1000);} catch (InterruptedException e1) {e1.printStackTrace();}
-                    }
-                }
-            }
-        });
+        this.sensorThread = new SensorManagerThread(this, this.edgeNetworkSocket);
         this.sensorThread.start();
-
     }
 
 
     public enum ElectionStatus{
         STARTED, TAKEN_CARE, WON, FINISHED
     }
+
+    private ElectionStatus electionStatus = ElectionStatus.FINISHED;
+    private final Object electionStatusLock = new Object();
 
     public ElectionStatus getElectionStatus() {
         return electionStatus;
@@ -266,6 +233,12 @@ public class EdgeNode{
         return electionStatusLock;
     }
 
+    private Object electionLock = new Object();
+
+    public Object getElectionLock() {
+        return electionLock;
+    }
+
     /*
      * Bully election algorithm (based on ID)
      * Sono sicuro che se esco da questo metodo ho un coordinatore
@@ -276,10 +249,10 @@ public class EdgeNode{
         boolean failed = false;
         ArrayList<EdgeNodeRepresentation> higherId = new ArrayList<>();
 
-        //Prepara un messaggio di ELECTION
+        //Prepara un messaggio di HELLO_ELECTION
         String electionMsg = new Gson().toJson(new ElectionMesssage(ElectionMesssage.ElectionMessageType.ELECTION, this.getRepresentation()));
 
-        //Manda pacchetti ELECTION agli ID maggiori (e li salva in higherId)
+        //Manda pacchetti HELLO_ELECTION agli ID maggiori (e li salva in higherId)
         for(EdgeNodeRepresentation e: this.nodes){
             if(e.getNodeId() > this.getNodeId()){
                 System.out.println("DEBUG: mando pacchetto al nodo: "+e.getNodeId());
@@ -311,13 +284,17 @@ public class EdgeNode{
             // Se il sensorThread stava aspettando una risposta e
             // siamo entrati qui dentro non per merito suo,
             // lo facciamo passare oltre
+            //TODO no buono
             setAwaitingCoordinatorACK(false);
             return;
         }
         else{
             //Aspetto 2 secondi
             System.out.println("DEBUG: attendo risposte");
-            try { Thread.sleep(2000); } catch (InterruptedException e) { e.printStackTrace();}
+            try {
+                synchronized (this.electionLock){
+                    this.electionLock.wait(2000);
+                }} catch (InterruptedException e) { e.printStackTrace();}
 
             synchronized (this.electionStatusLock){
                 //Se l'elezione è finita ho ricevuto un VICTORY packet e qualcuno sarà il coordinatore
@@ -343,7 +320,10 @@ public class EdgeNode{
 
             //Se invece ho ricevuto un ACK da qualcuno con id superiore al mio aspetto altri 5 secondi
             System.out.println("Ho ricevuto ALIVE_ACK da qualcuno di superiore aspetto altri 5 secondi");
-            try { Thread.sleep(5000); } catch (InterruptedException e) { e.printStackTrace();}
+            try {
+                synchronized (this.electionLock){
+                    this.electionLock.wait(5000);
+                }} catch (InterruptedException e) { e.printStackTrace();}
 
             //Se dopo i 5 secondi l'elezione non è finita vuol dire che qualcuno è morto dopo aver mandato un ACK, ricomincio
             synchronized (this.electionStatusLock){
@@ -390,25 +370,35 @@ public class EdgeNode{
         return nodes;
     }
 
-    public EdgeNodeRepresentation getCoordinator() {
-        return coordinator;
-    }
-
     public EdgeNodeRepresentation getRepresentation(){
         if(this.representation == null)
             this.representation =  new EdgeNodeRepresentation(this.getxPos(), this.getyPos(), this.getNodeId(), this.getIpAddr(), this.getSensorsPort(), this.getNodesPort());
         return this.representation;
     }
 
+    public EdgeNodeRepresentation getCoordinator() {
+        synchronized (this.coordinatorLock) {
+            return coordinator;
+        }
+    }
+
     public void setCoordinator(EdgeNodeRepresentation coordinator) {
-        this.coordinator = coordinator;
+        synchronized (this.coordinatorLock){
+            this.coordinator = coordinator;
+        }
     }
 
     public boolean isCoordinator(){
-        if(coordinator == null)
-            return false;
-        else
-            return this.getNodeId() == this.coordinator.getNodeId();
+        synchronized (this.coordinatorLock) {
+            if (coordinator == null)
+                return false;
+            else
+                return this.getNodeId() == this.coordinator.getNodeId();
+        }
+    }
+
+    public Object getCoordinatorLock() {
+        return coordinatorLock;
     }
 
     public boolean isShutdown() {

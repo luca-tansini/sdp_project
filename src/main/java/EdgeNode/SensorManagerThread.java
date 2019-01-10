@@ -23,7 +23,7 @@ public class SensorManagerThread extends Thread {
 
         while (true){
             try {
-                //Se il coordinatore non è definito (può succedere solo all'inizio in effetti) non fa nulla TODO: migliorare situazione
+                //Se il coordinatore non è definito non fa nulla
                 if(parent.getCoordinator() != null) {
                     System.out.println("SensorManagerThread is sending STATS_UPDATE: random message from " + parent.getNodeId());
                     CoordinatorMessage coordinatorMessage = new CoordinatorMessage(CoordinatorMessage.CoordinatorMessageType.STATS_UPDATE, parent.getRepresentation(), "random message from " + parent.getNodeId());
@@ -34,9 +34,7 @@ public class SensorManagerThread extends Thread {
                 Thread.sleep(5000);
                 if(parent.isAwaitingCoordinatorACK() == true){
                     System.out.println("DEBUG: Il coordinatore è morto!");
-                    //Rimuove il vecchio coordinatore dalla lista dei nodi attivi
                     parent.setCoordinator(null);
-                    parent.getNodes().remove(parent.getCoordinator());
                     parent.setAwaitingCoordinatorACK(false);
                     synchronized (parent.getElectionStatusLock()){
                         if(parent.getElectionStatus() != EdgeNode.ElectionStatus.FINISHED)
@@ -48,7 +46,6 @@ public class SensorManagerThread extends Thread {
                 }
             } catch (Exception e){
                 e.printStackTrace();
-                try {Thread.sleep(1000);} catch (InterruptedException e1) {e1.printStackTrace();}
             }
         }
     }

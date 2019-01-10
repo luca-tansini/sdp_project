@@ -1,0 +1,32 @@
+Un nodo nuovo manda i pacchetti HELLO a tutti.
+Si mette in attesa per X secondi dopo i quali, se non ha ricevuto risposte può considerare che siano tutti morti, quindi è lui il capo? FALSO! Se non riceve risposte può anche essere successo che nessun nodo si fosse ancora accorto che il coordinatore era morto nel gestire la sua richiesta HELLO, e se il nodo nuovo è quello con ID minore non verrà mai coinvolto nel processo di elezione, e nel caso della catena lunghissima non arriveranno i pacchetti victory entro i 10 secondi. Quindi devo fare in modo che i messaggi HELLO ricevano sempre una risposta adeguata.
+D'altra parte se decido che dopo i 10 secondi invece di dichiararsi capo, il nodo fa partire un'elezione, può succedere che sia il nodo di ID maggiore e si proclami capo mentre qualcuno stava per proclamarsi capo a sua volta? No perchè entro 10 secondi dalla presentazione sarebbe stato coinvolto in un'elezione.
+Se invece faccio partire l'elezione dopo i 10 secondi senza risposte, e non avevo ricevuto risposte per la serie di sfighe (ho l'ID minore e gli altri non terminano l'elezione per la serie di morti)
+
+Se invece riceve una risposta entro gli X secondi ci sono due casi:
+    • Ha risposto il coordinatore: Il coordinatore non è più NULL. tutto bene, inizio il lavoro e passo oltre.
+    • Qualcuno mi ha risposto che ci sono delle elezioni in corso. A questo punto mi metto in attesa per X secondi sperando di ricevere:
+        - dei pacchetti VICTORY: in tal caso qualcuno ha vinto e va tutto bene.
+        - dei pacchetti ELECTION: qualcuno è morto a metà elezione, l'elezione è ripartita e sono stato coinvolto: in tal caso entro normalmente nel processo di elezione e va tutto bene. Se però ho il più piccolo ID di tutti potrei non ricevere nesssun pacchetto ELECTION e potrebbero morire tutti. Quindi allo scadere degli X secondi ricomincio dal giro di pacchetti HELLO.
+
+Quando un nodo riceve un pacchetto HELLO:
+    • Aggiunge il mittente alla lista dei nodi
+    Poi:
+        • Se è il coordinatore gli risponde che è il coordinatore
+        • Se sono in corso delle elezioni vuol dire che il coordinatore è morto e glielo comunica. Non è possibile che qualcuno comunichi che le elezioni sono in corso prima che il coordinatore risponda perche il coordinatore deve essere morto.
+        • altrimenti???
+
+________________________________________________________________________________
+
+ANDAVA BENE COME ERA ALL'INIZIO:
+
+parto e mando i pacchetti HELLO.
+
+Aspetto 15 secondi:
+    se ricevo risposta dal coordinatore è tutto ok.
+    se ricevo un qualsiasi messaggio election prendo parte all'elezione e abbandono la helloSequence.
+    se non ricevo risposte faccio partire un'elezione.
+
+E' difficile che non abbia ricevuto nulla per 15 secondi se non sono tutti morti, nel caso sfigato dell'ID minore e della sequenza di morti che non fa arrivare i pacchetti VICTORY, manderò dei pacchetti election a gente che fa già parte di un'elezione quindi np. Se invece ho ID maggiore, in 15 secondi sicuramente sono stato coinvolto in un'elezione da qualcuno.
+
+CASINO: SE UN NODO MANDA ELECTION AD UN NODO SUPERIORE CHE È MORTO, IL QUALE PERÒ TORNA IN VITA NEI 2 SECONDI IN CUI IL NODO MITTENTE ATTENDE RISPOSTE, NON GLI RISPONDERÀ, QUINDI IL MITTENTE LO ELIMINERÀ DALLA LISTA DEI NODI ATTIVI, SI PROCLAMERÀ COORDINATORE E IL NODO RISORTO ASPETTERÀ 15 SECONDI PER POI PROCLAMARSI NUOVAMENTE COORDINATORE. DOVREI AVER RISOLTO CON LA LISTA DI SAFETY.

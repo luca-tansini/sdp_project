@@ -1,15 +1,15 @@
 package EdgeNode.EdgeNetworkMessage;
 import ServerCloud.Model.EdgeNodeRepresentation;
 
-public class WhoisCoordRequestMessage extends EdgeNetworkMessage {
+public class HelloMessage extends EdgeNetworkMessage {
 
     private EdgeNodeRepresentation requestingNode;
 
-    public WhoisCoordRequestMessage() {
+    public HelloMessage() {
     }
 
-    public WhoisCoordRequestMessage(EdgeNodeRepresentation requestingNode){
-        this.setType(MessageType.WHOIS_COORD_REQUEST);
+    public HelloMessage(EdgeNodeRepresentation requestingNode){
+        this.setType(MessageType.HELLO);
         this.requestingNode = requestingNode;
     }
 

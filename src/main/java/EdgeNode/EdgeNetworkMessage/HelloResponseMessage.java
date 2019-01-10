@@ -2,15 +2,16 @@ package EdgeNode.EdgeNetworkMessage;
 
 import ServerCloud.Model.EdgeNodeRepresentation;
 
-public class WhoisCoordResponseMessage extends EdgeNetworkMessage {
+public class HelloResponseMessage extends EdgeNetworkMessage {
 
     private EdgeNodeRepresentation coordinator;
 
-    public WhoisCoordResponseMessage() {
+    public HelloResponseMessage() {
     }
 
-    public WhoisCoordResponseMessage(EdgeNodeRepresentation coordinator){
-        this.setType(MessageType.WHOIS_COORD_RESPONSE);
+    //Se coordinator è NULL vuol dire che ci sono delle elezioni in corso
+    public HelloResponseMessage(EdgeNodeRepresentation coordinator){
+        this.setType(MessageType.HELLO_RESPONSE);
         this.coordinator = coordinator;
     }
 

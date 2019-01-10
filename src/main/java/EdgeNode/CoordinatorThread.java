@@ -3,7 +3,6 @@ package EdgeNode;
 import EdgeNode.EdgeNetworkMessage.CoordinatorMessage;
 import com.google.gson.Gson;
 
-import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
 
