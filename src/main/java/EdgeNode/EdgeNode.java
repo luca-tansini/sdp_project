@@ -5,6 +5,7 @@ import EdgeNode.EdgeNetworkMessage.ElectionMesssage;
 import EdgeNode.EdgeNetworkMessage.HelloMessage;
 import ServerCloud.Model.EdgeNodeRepresentation;
 import ServerCloud.Model.Grid;
+import ServerCloud.Model.Measurement;
 import ServerCloud.Model.NodeList;
 import com.google.gson.Gson;
 import com.sun.jersey.api.client.Client;
@@ -150,7 +151,7 @@ public class EdgeNode{
                     return;
                 }
                 //Non ho ricevuto niente da nessuno, faccio partire una mia elezione, alla peggio contatto nodi già in un'elezione e mi manderanno un ACK
-                System.out.println("DEBUG: HelloSequence is startin election after 15 seconds");
+                System.out.println("DEBUG: HelloSequence is starting election after 15 seconds");
                 setElectionStatus(ElectionStatus.STARTED);
                 bullyElection();
             }
@@ -184,6 +185,9 @@ public class EdgeNode{
     private boolean awaitingCoordinatorACK;
     private final Object coordinatorACKLock = new Object();
 
+    public Object getCoordinatorACKLock() {
+        return coordinatorACKLock;
+    }
 
     public boolean isAwaitingCoordinatorACK() {
         synchronized (coordinatorACKLock) {
@@ -194,25 +198,47 @@ public class EdgeNode{
     public void setAwaitingCoordinatorACK(boolean awaitingCoordinatorACK) {
         synchronized (coordinatorACKLock) {
             this.awaitingCoordinatorACK = awaitingCoordinatorACK;
+            if(awaitingCoordinatorACK == false)
+                coordinatorACKLock.notify();
         }
     }
 
+    private SharedBuffer<Measurement> sensorsMeasurementBuffer;
+
+    public SharedBuffer<Measurement> getSensorsMeasurementBuffer() {
+        return sensorsMeasurementBuffer;
+    }
+
     /*
-     * Crea la socket per la comunicazione con i sensori
-     * Crea il pool di thread per gestirli
+     * Crea il buffer per accumulare le statistiche
      * Lancia il thread per mandare i dati al coordinatore
      */
     private void startSensorsManagement(){
 
-        //TODO: Crea la socket per la comunicazione con i sensori
+        //Crea il buffer per accumulare le misurazioni dei sensori
+        this.sensorsMeasurementBuffer = new SharedBuffer<Measurement>();
 
-        //TODO: Crea il pool di thread per gestirli
+        //MOCK: fa partire un thread che genera statistiche
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                Random rng = new Random();
+                while(!isShutdown()){
+                    try {
+                        int n = rng.nextInt(500);
+                        Thread.sleep(n+1);
+                        sensorsMeasurementBuffer.put(new Measurement(n, 0));
+                    } catch (InterruptedException e){
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }).start();
 
-        //TODO: Lancia il thread che raccoglie i dati e li manda al coordinatore. SUPER DUMMY, se li manda anche da solo
+        //Lancia il thread che manda le medie al coordinatore.
         this.sensorThread = new SensorManagerThread(this, this.edgeNetworkSocket);
         this.sensorThread.start();
     }
-
 
     public enum ElectionStatus{
         STARTED, TAKEN_CARE, WON, FINISHED
@@ -281,10 +307,8 @@ public class EdgeNode{
             synchronized (this.electionStatusLock){
                 this.electionStatus = ElectionStatus.FINISHED;
             }
-            // Se il sensorThread stava aspettando una risposta e
-            // siamo entrati qui dentro non per merito suo,
-            // lo facciamo passare oltre
-            //TODO no buono
+
+            //Se ho vinto un'elezione iniziata da me devo segnalarlo al SensorManagerThread
             setAwaitingCoordinatorACK(false);
             return;
         }
@@ -399,6 +423,10 @@ public class EdgeNode{
 
     public Object getCoordinatorLock() {
         return coordinatorLock;
+    }
+
+    public SharedDatagramSocket getEdgeNetworkSocket() {
+        return edgeNetworkSocket;
     }
 
     public boolean isShutdown() {

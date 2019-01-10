@@ -1,15 +1,25 @@
 package EdgeNode;
 
 import EdgeNode.EdgeNetworkMessage.CoordinatorMessage;
+import ServerCloud.Model.EdgeNodeRepresentation;
+import ServerCloud.Model.Measurement;
 import com.google.gson.Gson;
 
 import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
+import java.time.Instant;
+import java.util.ArrayList;
+
+import static EdgeNode.EdgeNode.ElectionStatus.FINISHED;
+import static EdgeNode.EdgeNode.ElectionStatus.STARTED;
 
 public class SensorManagerThread extends Thread {
 
-    EdgeNode parent;
-    SharedDatagramSocket socket;
+    private EdgeNode parent;
+    private SharedDatagramSocket socket;
+    private ArrayList<Measurement> buffer= new ArrayList();
+    private Gson gson = new Gson();
+    private Measurement cached;
 
     public SensorManagerThread(EdgeNode parent, SharedDatagramSocket socket){
         this.parent = parent;
@@ -19,34 +29,60 @@ public class SensorManagerThread extends Thread {
     @Override
     public void run() {
 
-        Gson gson = new Gson();
+        while (!parent.isShutdown()){
 
-        while (true){
-            try {
-                //Se il coordinatore non è definito non fa nulla
-                if(parent.getCoordinator() != null) {
-                    System.out.println("SensorManagerThread is sending STATS_UPDATE: random message from " + parent.getNodeId());
-                    CoordinatorMessage coordinatorMessage = new CoordinatorMessage(CoordinatorMessage.CoordinatorMessageType.STATS_UPDATE, parent.getRepresentation(), "random message from " + parent.getNodeId());
-                    String json = gson.toJson(coordinatorMessage, CoordinatorMessage.class);
-                    socket.write(new DatagramPacket(json.getBytes(), json.length(), new InetSocketAddress(parent.getCoordinator().getIpAddr(), parent.getCoordinator().getNodesPort())));
-                    parent.setAwaitingCoordinatorACK(true);
-                }
-                Thread.sleep(5000);
-                if(parent.isAwaitingCoordinatorACK() == true){
-                    System.out.println("DEBUG: Il coordinatore è morto!");
-                    parent.setCoordinator(null);
-                    parent.setAwaitingCoordinatorACK(false);
-                    synchronized (parent.getElectionStatusLock()){
-                        if(parent.getElectionStatus() != EdgeNode.ElectionStatus.FINISHED)
-                            continue;
-                        parent.setElectionStatus(EdgeNode.ElectionStatus.STARTED);
-                    }
-                    System.out.println("DEBUG: SensorManagerThread: faccio partire elezione");
-                    parent.bullyElection();
-                }
-            } catch (Exception e){
-                e.printStackTrace();
+            EdgeNodeRepresentation coordinator = parent.getCoordinator();
+            if(coordinator != null && cached != null) {
+                System.out.println("DEBUG: SensorManagerThread mando misurazione cached");
+                Measurement tmp = cached;
+                cached = null;
+                sendMeasurement(coordinator, tmp);
             }
+
+            buffer.add(parent.getSensorsMeasurementBuffer().take());
+            if(buffer.size() == 40){
+                double mean = 0;
+                for(Measurement m: buffer)
+                    mean += m.getValue();
+                Measurement measurement = new Measurement(mean/40, Instant.now().toEpochMilli());
+                //Sliding window, 50% overlap
+                for(int i=0; i<20; i++)
+                    buffer.remove(0);
+
+                coordinator = parent.getCoordinator();
+                if(coordinator != null) {
+                    System.out.println("DEBUG: SensorManagerThread mando misurazione");
+                    sendMeasurement(coordinator, measurement);
+                }
+                else{
+                    //Non ha senso avere più di un valore cachato
+                    this.cached = measurement;
+                }
+            }
+
+        }
+    }
+
+    private void sendMeasurement(EdgeNodeRepresentation coordinator, Measurement measurement){
+        CoordinatorMessage msg = new CoordinatorMessage(CoordinatorMessage.CoordinatorMessageType.STATS_UPDATE, parent.getRepresentation(), measurement);
+        String json = gson.toJson(msg, CoordinatorMessage.class);
+        parent.getEdgeNetworkSocket().write(new DatagramPacket(json.getBytes(), json.length(), new InetSocketAddress(coordinator.getIpAddr(), coordinator.getNodesPort())));
+        synchronized (parent.getCoordinatorACKLock()){
+            parent.setAwaitingCoordinatorACK(true);
+            try{parent.getCoordinatorACKLock().wait(2000);} catch (InterruptedException e){e.printStackTrace();}
+        }
+        if(parent.isAwaitingCoordinatorACK()){
+            System.out.println("DEBUG: SensorManagerThread: Il coordinatore è morto!");
+            cached = measurement;
+            parent.setCoordinator(null);
+            parent.setAwaitingCoordinatorACK(false);
+            synchronized (parent.getElectionStatusLock()){
+                if(parent.getElectionStatus() != FINISHED)
+                    return;
+                parent.setElectionStatus(STARTED);
+            }
+            System.out.println("DEBUG: SensorManagerThread: faccio partire elezione");
+            parent.bullyElection();
         }
     }
 

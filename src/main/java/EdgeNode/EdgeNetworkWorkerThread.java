@@ -131,8 +131,8 @@ public class EdgeNetworkWorkerThread extends Thread {
                 synchronized (parent.getElectionStatusLock()){
                     parent.setElectionStatus(EdgeNode.ElectionStatus.FINISHED);
                 }
-                parent.setCoordinator(sender);
                 parent.setAwaitingCoordinatorACK(false);
+                parent.setCoordinator(sender);
                 synchronized (parent.getElectionLock()) {
                     parent.getElectionLock().notify();
                 }

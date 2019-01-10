@@ -1,6 +1,7 @@
 package ServerCloud.Model;
 
 import javax.xml.bind.annotation.XmlRootElement;
+import java.time.Instant;
 
 @XmlRootElement
 public class Measurement {
@@ -30,4 +31,10 @@ public class Measurement {
     public void setTimestamp(long timestamp) {
         this.timestamp = timestamp;
     }
+
+    @Override
+    public String toString(){
+        return "value: "+value + " at: "+ Instant.ofEpochMilli(timestamp);
+    }
+
 }

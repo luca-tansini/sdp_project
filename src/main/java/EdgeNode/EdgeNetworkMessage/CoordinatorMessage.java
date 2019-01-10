@@ -1,6 +1,7 @@
 package EdgeNode.EdgeNetworkMessage;
 
 import ServerCloud.Model.EdgeNodeRepresentation;
+import ServerCloud.Model.Measurement;
 
 public class CoordinatorMessage extends EdgeNetworkMessage {
 
@@ -10,24 +11,23 @@ public class CoordinatorMessage extends EdgeNetworkMessage {
 
     private CoordinatorMessageType coordinatorMessageType;
     private EdgeNodeRepresentation sender;
-    //TODO: to be removed
-    private String msg;
+    private Measurement measurement;
 
     public CoordinatorMessage(){}
 
-    public CoordinatorMessage(CoordinatorMessageType coordinatorMessageType, EdgeNodeRepresentation sender, String msg) {
+    public CoordinatorMessage(CoordinatorMessageType coordinatorMessageType, EdgeNodeRepresentation sender, Measurement measurement) {
         this.setType(MessageType.COORDINATOR);
         this.coordinatorMessageType = coordinatorMessageType;
         this.sender = sender;
-        this.msg = msg;
+        this.measurement = measurement;
     }
 
-    public String getMsg() {
-        return msg;
+    public Measurement getMeasurement() {
+        return measurement;
     }
 
-    public void setMsg(String msg) {
-        this.msg = msg;
+    public void setMeasurement(Measurement measurement) {
+        this.measurement = measurement;
     }
 
     public CoordinatorMessageType getCoordinatorMessageType() {
