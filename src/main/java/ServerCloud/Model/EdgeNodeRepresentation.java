@@ -6,53 +6,43 @@ import java.lang.Math;
 @XmlRootElement
 public class EdgeNodeRepresentation {
 
-    private int xPos;
-    private int yPos;
+    private Position position;
     private int nodeId;
     private String ipAddr;
     private int sensorsPort;
     private int nodesPort;
 
-    public EdgeNodeRepresentation(int xPos, int yPos, int nodeId, String ipAddr, int sensorsPort, int nodesPort) {
-        this.xPos = xPos;
-        this.yPos = yPos;
+    public EdgeNodeRepresentation(Position position, int nodeId, String ipAddr, int sensorsPort, int nodesPort) {
+        this.position = position;
         this.nodeId = nodeId;
         this.ipAddr = ipAddr;
         this.sensorsPort = sensorsPort;
         this.nodesPort = nodesPort;
     }
 
-    public int getDistance(int xPos, int yPos){
-        return Math.abs(xPos - this.xPos) + Math.abs(yPos - this.yPos);
+    public int getDistance(EdgeNodeRepresentation other){
+        return position.getDistance(other.getPosition());
     }
 
-    public  int getDistance(EdgeNodeRepresentation other){
-        return getDistance(other.getxPos(), other.getyPos());
+    public int getDistance(Position pos){
+        return position.getDistance(pos);
     }
 
     @Override
     public String toString(){
-        return "node["+ nodeId + ", pos(" + xPos + "," + yPos + "), " + ipAddr +"]";
+        return "node["+ nodeId + ", "+position+", " + ipAddr +"]";
     }
 
 
     //Methods needed by JAXB
     public EdgeNodeRepresentation(){}
 
-    public int getxPos() {
-        return xPos;
+    public Position getPosition() {
+        return position;
     }
 
-    public void setxPos(int xPos) {
-        this.xPos = xPos;
-    }
-
-    public int getyPos() {
-        return yPos;
-    }
-
-    public void setyPos(int yPos) {
-        this.yPos = yPos;
+    public void setPosition(Position position) {
+        this.position = position;
     }
 
     public int getNodeId() {

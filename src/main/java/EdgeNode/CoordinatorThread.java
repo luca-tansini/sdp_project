@@ -1,7 +1,7 @@
 package EdgeNode;
 
 import EdgeNode.EdgeNetworkMessage.CoordinatorMessage;
-import ServerCloud.Model.Measurement;
+import Sensor.Measurement;
 import com.google.gson.Gson;
 
 import java.net.DatagramPacket;
@@ -20,7 +20,7 @@ public class CoordinatorThread extends Thread{
         this.buffer = buffer;
         this.socket = socket;
         //MOCK
-        this.global = new Measurement(42,42);
+        this.global = new Measurement("pm10-"+42, "PM10",42,42);
     }
 
     public void run(){
@@ -32,7 +32,7 @@ public class CoordinatorThread extends Thread{
         //TODO: fa partire thread di timeout che scrive al server
 
         //Legge gli update e risponde
-        while (true){
+        while (!parent.isShutdown()){
             CoordinatorMessage msg = buffer.take();
             System.out.println("Coordinator msg: "+msg.getMeasurement());
             CoordinatorMessage response = new CoordinatorMessage(CoordinatorMessage.CoordinatorMessageType.ACK, parent.getRepresentation(), global);

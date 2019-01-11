@@ -1,5 +1,7 @@
 package ServerCloud.Model;
 
+import Sensor.Measurement;
+
 import javax.xml.bind.annotation.XmlRootElement;
 import java.util.ArrayList;
 import java.util.HashMap;

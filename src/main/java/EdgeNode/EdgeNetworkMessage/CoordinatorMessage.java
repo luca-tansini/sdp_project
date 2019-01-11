@@ -1,7 +1,7 @@
 package EdgeNode.EdgeNetworkMessage;
 
+import Sensor.Measurement;
 import ServerCloud.Model.EdgeNodeRepresentation;
-import ServerCloud.Model.Measurement;
 
 public class CoordinatorMessage extends EdgeNetworkMessage {
 

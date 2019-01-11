@@ -1,0 +1,14 @@
+service SensorsGRPCInterface{
+
+    rpc SendMeasurement(stream Measurement) returns(Null) {}
+
+}
+
+message Measurement{
+    required string id = 1;
+    required string type = 2;
+    required double value = 3;
+    required int64 timestamp = 4;
+}
+
+message Null{}

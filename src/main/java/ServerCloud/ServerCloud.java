@@ -1,14 +1,9 @@
 package ServerCloud;
 
-import ServerCloud.Model.Measurement;
-import ServerCloud.Model.Model;
-import ServerCloud.Model.Statistics;
 import com.sun.jersey.api.container.httpserver.HttpServerFactory;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
 
 public class ServerCloud {
 

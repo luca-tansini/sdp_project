@@ -29,7 +29,9 @@ public class Grid {
 
     public synchronized void addNode(EdgeNodeRepresentation node){
 
-        if(node.getxPos() < 0 || node.getxPos() >= this.XSize || node.getyPos() <0 || node.getyPos() >= this.YSize)
+        Position pos = node.getPosition();
+
+        if(pos.getX() < 0 || pos.getX() >= this.XSize || pos.getY() <0 || pos.getY() >= this.YSize)
             throw new IllegalArgumentException(INVALID_POS);
 
         //Efficienza 0, whatever
@@ -53,25 +55,25 @@ public class Grid {
         throw new IllegalArgumentException("node not found");
     }
 
-    /*Nearest node non usa meccanismi di sincronizzazione, perchè
+    /*TODO: Nearest node non usa meccanismi di sincronizzazione, perchè
     * quando viene chiamata fuori dalla addNode viene chiamata dai sensori
     * e anche se dovesse dare un risultato sbagliato
     * (nodo che non è il più vicino o nodo rimosso)
     * il sensore si sistemerà automaticamente in pochi secondi*/
-    public EdgeNodeRepresentation getNearestNode(int xPos, int yPos){
+    public EdgeNodeRepresentation getNearestNode(Position pos){
         EdgeNodeRepresentation nearest = null;
         int nearestDist = this.XSize + this.YSize;
         for(EdgeNodeRepresentation n: this.getNodes()) {
-            if(n.getDistance(xPos, yPos) < nearestDist){
+            if(n.getDistance(pos) < nearestDist){
                 nearest = n;
-                nearestDist = n.getDistance(xPos, yPos);
+                nearestDist = n.getDistance(pos);
             }
         }
         return nearest;
     }
 
     public EdgeNodeRepresentation getNearestNode(EdgeNodeRepresentation node){
-        return getNearestNode(node.getxPos(), node.getyPos());
+        return getNearestNode(node.getPosition());
     }
 
 }

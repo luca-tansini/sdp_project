@@ -3,14 +3,18 @@ package EdgeNode;
 import EdgeNode.EdgeNetworkMessage.CoordinatorMessage;
 import EdgeNode.EdgeNetworkMessage.ElectionMesssage;
 import EdgeNode.EdgeNetworkMessage.HelloMessage;
+import EdgeNode.GRPC.SensorsGRPCInterfaceImpl;
+import Sensor.Measurement;
 import ServerCloud.Model.EdgeNodeRepresentation;
 import ServerCloud.Model.Grid;
-import ServerCloud.Model.Measurement;
 import ServerCloud.Model.NodeList;
+import ServerCloud.Model.Position;
 import com.google.gson.Gson;
 import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
+import io.grpc.Server;
+import io.grpc.ServerBuilder;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -24,8 +28,7 @@ public class EdgeNode{
 
     private static final int THREAD_POOL_SIZE = 5;
 
-    private int xPos;
-    private int yPos;
+    private Position position;
     private int nodeId;
     private String ipAddr;
     private int sensorsPort;
@@ -40,11 +43,11 @@ public class EdgeNode{
     private SharedBuffer<CoordinatorMessage> coordinatorBuffer;
 
     private SharedDatagramSocket edgeNetworkSocket;
-    private EdgeNetworkWorkerThread edgeNetworkThreadPool[];
+    private EdgeNetworkWorkerThread[] edgeNetworkThreadPool;
 
     private volatile boolean shutdown;
 
-    public static void main(String args[]){
+    public static void main(String[] args){
 
         if(args.length != 4){
             System.out.println("usage: EdgeNode <nodeId> <ipAddr> <sensorsPort> <nodesPort>");
@@ -56,14 +59,17 @@ public class EdgeNode{
         int sensorsPort = Integer.parseInt(args[2]);
         int nodesPort = Integer.parseInt(args[3]);
 
-        Random rng = new Random();
-        EdgeNodeRepresentation nodeRepr = new EdgeNodeRepresentation(0, 0, nodeId, ipAddr, sensorsPort, nodesPort);
+        //Immediately start sensorsCommunication
+        EdgeNode node = new EdgeNode(null, nodeId, ipAddr, sensorsPort, nodesPort);
+
+        EdgeNodeRepresentation nodeRepr = new EdgeNodeRepresentation(new Position(0,0), nodeId, ipAddr, sensorsPort, nodesPort);
         Client client = Client.create();
         WebResource webResource = client.resource("http://localhost:4242/edgenetwork/nodes");
 
+        Random rng = new Random();
         for(int i=0; i<10; i++){
-            nodeRepr.setxPos(rng.nextInt(100));
-            nodeRepr.setyPos(rng.nextInt(100));
+            nodeRepr.getPosition().setX(rng.nextInt(100));
+            nodeRepr.getPosition().setY(rng.nextInt(100));
             ClientResponse response = webResource.type("application/json").post(ClientResponse.class, nodeRepr);
             if(response.getStatus() != 200){
                 String error = response.getEntity(String.class);
@@ -74,7 +80,7 @@ public class EdgeNode{
                 System.out.println("Got error: "+error+". retrying...");
             }
             else {
-                EdgeNode node = new EdgeNode(nodeRepr);
+                node.setPosition(nodeRepr.getPosition());
                 NodeList nodes = response.getEntity(NodeList.class);
                 node.nodes = new SharedNodeList(nodes.getNodes());
                 //Toglie se stesso dalla lista di nodi
@@ -85,13 +91,14 @@ public class EdgeNode{
         }
 
         System.out.println("Couldn't join edge network, terminating");
-
+        //Stop sensorCommunication
+        node.coordinatorUpdatesThread.stop();
+        node.gRPCServer.shutdownNow();
     }
 
     private void startWork(){
 
         startEdgeNetworkCommunication();
-        startSensorsManagement();
 
         if(nodes.size() == 0){
             this.setCoordinator(this.getRepresentation());
@@ -106,20 +113,23 @@ public class EdgeNode{
         System.out.println("press a key to stop");
         try {System.in.read();} catch (IOException e) {e.printStackTrace();}
         System.out.println("stopping...");
+
+        //Manda al server la notifica di stop
+        Client client = Client.create();
+        WebResource webResource = client.resource("http://localhost:4242/edgenetwork/nodes/"+this.nodeId);
+        webResource.type("application/json").delete(ClientResponse.class);
+
         this.shutdown = true;
         //TODO: dovrei gestire questa cosa con gli shutdown. Ma i thread in attesa sulle socket?
         for(EdgeNetworkWorkerThread t: this.edgeNetworkThreadPool)
             t.stop();
         if(this.isCoordinator() && this.coordinatorThread != null)
             this.coordinatorThread.stop();
-        if(this.sensorThread != null)
-            this.sensorThread.stop();
+        if(this.coordinatorUpdatesThread != null)
+            this.coordinatorUpdatesThread.stop();
         this.edgeNetworkSocket.close();
+        this.gRPCServer.shutdownNow();
 
-        //Manda al server la notifica di stop
-        Client client = Client.create();
-        WebResource webResource = client.resource("http://localhost:4242/edgenetwork/nodes/"+this.nodeId);
-        webResource.type("application/json").delete(ClientResponse.class);
     }
 
     //HELLO SEQUENCE MANAGEMENT
@@ -181,7 +191,7 @@ public class EdgeNode{
         }
     }
 
-    private Thread sensorThread;
+    private Thread coordinatorUpdatesThread;
     private boolean awaitingCoordinatorACK;
     private final Object coordinatorACKLock = new Object();
 
@@ -209,8 +219,11 @@ public class EdgeNode{
         return sensorsMeasurementBuffer;
     }
 
+    private Server gRPCServer;
+
     /*
      * Crea il buffer per accumulare le statistiche
+     * Crea il server grpc
      * Lancia il thread per mandare i dati al coordinatore
      */
     private void startSensorsManagement(){
@@ -218,26 +231,13 @@ public class EdgeNode{
         //Crea il buffer per accumulare le misurazioni dei sensori
         this.sensorsMeasurementBuffer = new SharedBuffer<Measurement>();
 
-        //MOCK: fa partire un thread che genera statistiche
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                Random rng = new Random();
-                while(!isShutdown()){
-                    try {
-                        int n = rng.nextInt(500);
-                        Thread.sleep(n+1);
-                        sensorsMeasurementBuffer.put(new Measurement(n, 0));
-                    } catch (InterruptedException e){
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }).start();
+        //Crea il server grpc che riceve gli stream dai sensori
+        gRPCServer = ServerBuilder.forPort(this.sensorsPort).addService(new SensorsGRPCInterfaceImpl(this)).build();
+        try{gRPCServer.start();} catch (IOException e){e.printStackTrace();}
 
         //Lancia il thread che manda le medie al coordinatore.
-        this.sensorThread = new SensorManagerThread(this, this.edgeNetworkSocket);
-        this.sensorThread.start();
+        this.coordinatorUpdatesThread = new CoordinatorUpdatesThread(this, this.edgeNetworkSocket);
+        this.coordinatorUpdatesThread.start();
     }
 
     public enum ElectionStatus{
@@ -308,7 +308,7 @@ public class EdgeNode{
                 this.electionStatus = ElectionStatus.FINISHED;
             }
 
-            //Se ho vinto un'elezione iniziata da me devo segnalarlo al SensorManagerThread
+            //Se ho vinto un'elezione iniziata da me devo segnalarlo al CoordinatorUpdatesThread
             setAwaitingCoordinatorACK(false);
             return;
         }
@@ -376,18 +376,22 @@ public class EdgeNode{
         return coordinatorBuffer;
     }
 
-    public EdgeNode(int xPos, int yPos, int nodeId, String ipAddr, int sensorsPort, int nodesPort) {
-        this.xPos = xPos;
-        this.yPos = yPos;
+    public EdgeNode(Position position, int nodeId, String ipAddr, int sensorsPort, int nodesPort) {
+        this.position = position;
         this.nodeId = nodeId;
         this.ipAddr = ipAddr;
         this.sensorsPort = sensorsPort;
         this.nodesPort = nodesPort;
+        startSensorsManagement();
     }
 
     public EdgeNode(EdgeNodeRepresentation repr) {
-        this(repr.getxPos(), repr.getyPos(), repr.getNodeId(), repr.getIpAddr(), repr.getSensorsPort(), repr.getNodesPort());
+        this(repr.getPosition(), repr.getNodeId(), repr.getIpAddr(), repr.getSensorsPort(), repr.getNodesPort());
         shutdown = false;
+    }
+
+    public void setPosition(Position position) {
+        this.position = position;
     }
 
     public SharedNodeList getNodes() {
@@ -396,7 +400,7 @@ public class EdgeNode{
 
     public EdgeNodeRepresentation getRepresentation(){
         if(this.representation == null)
-            this.representation =  new EdgeNodeRepresentation(this.getxPos(), this.getyPos(), this.getNodeId(), this.getIpAddr(), this.getSensorsPort(), this.getNodesPort());
+            this.representation =  new EdgeNodeRepresentation(this.position, this.getNodeId(), this.getIpAddr(), this.getSensorsPort(), this.getNodesPort());
         return this.representation;
     }
 
@@ -431,14 +435,6 @@ public class EdgeNode{
 
     public boolean isShutdown() {
         return shutdown;
-    }
-
-    public int getxPos() {
-        return xPos;
-    }
-
-    public int getyPos() {
-        return yPos;
     }
 
     public int getNodeId() {

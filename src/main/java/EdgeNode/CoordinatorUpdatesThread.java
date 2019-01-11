@@ -1,8 +1,8 @@
 package EdgeNode;
 
 import EdgeNode.EdgeNetworkMessage.CoordinatorMessage;
+import Sensor.Measurement;
 import ServerCloud.Model.EdgeNodeRepresentation;
-import ServerCloud.Model.Measurement;
 import com.google.gson.Gson;
 
 import java.net.DatagramPacket;
@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import static EdgeNode.EdgeNode.ElectionStatus.FINISHED;
 import static EdgeNode.EdgeNode.ElectionStatus.STARTED;
 
-public class SensorManagerThread extends Thread {
+public class CoordinatorUpdatesThread extends Thread {
 
     private EdgeNode parent;
     private SharedDatagramSocket socket;
@@ -21,7 +21,7 @@ public class SensorManagerThread extends Thread {
     private Gson gson = new Gson();
     private Measurement cached;
 
-    public SensorManagerThread(EdgeNode parent, SharedDatagramSocket socket){
+    public CoordinatorUpdatesThread(EdgeNode parent, SharedDatagramSocket socket){
         this.parent = parent;
         this.socket = socket;
     }
@@ -33,7 +33,7 @@ public class SensorManagerThread extends Thread {
 
             EdgeNodeRepresentation coordinator = parent.getCoordinator();
             if(coordinator != null && cached != null) {
-                System.out.println("DEBUG: SensorManagerThread mando misurazione cached");
+                System.out.println("DEBUG: CoordinatorUpdatesThread mando misurazione cached");
                 Measurement tmp = cached;
                 cached = null;
                 sendMeasurement(coordinator, tmp);
@@ -44,14 +44,14 @@ public class SensorManagerThread extends Thread {
                 double mean = 0;
                 for(Measurement m: buffer)
                     mean += m.getValue();
-                Measurement measurement = new Measurement(mean/40, Instant.now().toEpochMilli());
+                Measurement measurement = new Measurement(parent.getNodeId()+"", "local mean", mean/40, Instant.now().toEpochMilli());
                 //Sliding window, 50% overlap
                 for(int i=0; i<20; i++)
                     buffer.remove(0);
 
                 coordinator = parent.getCoordinator();
                 if(coordinator != null) {
-                    System.out.println("DEBUG: SensorManagerThread mando misurazione");
+                    System.out.println("DEBUG: CoordinatorUpdatesThread mando misurazione");
                     sendMeasurement(coordinator, measurement);
                 }
                 else{
@@ -72,7 +72,7 @@ public class SensorManagerThread extends Thread {
             try{parent.getCoordinatorACKLock().wait(2000);} catch (InterruptedException e){e.printStackTrace();}
         }
         if(parent.isAwaitingCoordinatorACK()){
-            System.out.println("DEBUG: SensorManagerThread: Il coordinatore è morto!");
+            System.out.println("DEBUG: CoordinatorUpdatesThread: Il coordinatore è morto!");
             cached = measurement;
             parent.setCoordinator(null);
             parent.setAwaitingCoordinatorACK(false);
@@ -81,7 +81,7 @@ public class SensorManagerThread extends Thread {
                     return;
                 parent.setElectionStatus(STARTED);
             }
-            System.out.println("DEBUG: SensorManagerThread: faccio partire elezione");
+            System.out.println("DEBUG: CoordinatorUpdatesThread: faccio partire elezione");
             parent.bullyElection();
         }
     }
