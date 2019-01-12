@@ -50,6 +50,9 @@ public class EdgeNetworkServices {
     @POST
     @Consumes({"application/json"})
     public Response updateStatistics(Statistics stats){
+        //DEBUG
+        System.out.println("STATS_UPDATE:\n"+stats);
+        //
         Model.getInstance().getStats().update(stats);
         return Response.ok().build();
     }

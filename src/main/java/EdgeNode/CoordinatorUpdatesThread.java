@@ -44,7 +44,7 @@ public class CoordinatorUpdatesThread extends Thread {
                 double mean = 0;
                 for(Measurement m: buffer)
                     mean += m.getValue();
-                Measurement measurement = new Measurement(parent.getNodeId()+"", "local mean", mean/40, Instant.now().toEpochMilli());
+                Measurement measurement = new Measurement(parent.getNodeId()+"", "local", mean/40, Instant.now().toEpochMilli());
                 //Sliding window, 50% overlap
                 for(int i=0; i<20; i++)
                     buffer.remove(0);

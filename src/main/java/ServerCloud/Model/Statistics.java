@@ -1,6 +1,7 @@
 package ServerCloud.Model;
 
 import Sensor.Measurement;
+import io.grpc.stub.StreamObserver;
 
 import javax.xml.bind.annotation.XmlRootElement;
 import java.util.ArrayList;
@@ -10,14 +11,14 @@ import java.util.HashMap;
 public class Statistics {
 
     private ArrayList<Measurement> global;
-    private HashMap<Integer, ArrayList<Measurement>> local;
+    private HashMap<String, ArrayList<Measurement>> local;
 
     public Statistics(){
         this.global = new ArrayList<>();
         this.local = new HashMap<>();
     }
 
-    public Statistics(ArrayList<Measurement> global, HashMap<Integer, ArrayList<Measurement>> local) {
+    public Statistics(ArrayList<Measurement> global, HashMap<String, ArrayList<Measurement>> local) {
         this.global = global;
         this.local = local;
     }
@@ -27,7 +28,7 @@ public class Statistics {
 
         this.global.addAll(s.global);
 
-        for(Integer i: s.local.keySet()){
+        for(String i: s.local.keySet()){
             if(this.local.containsKey(i))
                 this.local.get(i).addAll(s.local.get(i));
             else
@@ -39,7 +40,7 @@ public class Statistics {
         this.global = global;
     }
 
-    public void setLocal(HashMap<Integer, ArrayList<Measurement>> local) {
+    public void setLocal(HashMap<String, ArrayList<Measurement>> local) {
         this.local = local;
     }
 
@@ -47,7 +48,32 @@ public class Statistics {
         return global;
     }
 
-    public HashMap<Integer, ArrayList<Measurement>> getLocal() {
+    public HashMap<String, ArrayList<Measurement>> getLocal() {
         return local;
     }
+
+    @Override
+    public String toString(){
+        String out = "Statistics:\n";
+        out += "    Global:\n       [";
+        for(int i=0; i<global.size(); i++) {
+            out += global.get(i);
+            if(i < global.size()-1)
+                out += ", ";
+        }
+        out += "]\n";
+        out += "    Local:\n";
+        for(String id: local.keySet()){
+            out += "        "+id+": [";
+            ArrayList l = local.get(id);
+            for(int i=0; i<l.size(); i++) {
+                out += l.get(i);
+                if(i < l.size()-1)
+                    out += ", ";
+            }
+            out+="]\n";
+        }
+        return out;
+    }
+
 }

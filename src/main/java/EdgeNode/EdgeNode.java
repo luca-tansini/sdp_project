@@ -5,10 +5,7 @@ import EdgeNode.EdgeNetworkMessage.ElectionMesssage;
 import EdgeNode.EdgeNetworkMessage.HelloMessage;
 import EdgeNode.GRPC.SensorsGRPCInterfaceImpl;
 import Sensor.Measurement;
-import ServerCloud.Model.EdgeNodeRepresentation;
-import ServerCloud.Model.Grid;
-import ServerCloud.Model.NodeList;
-import ServerCloud.Model.Position;
+import ServerCloud.Model.*;
 import com.google.gson.Gson;
 import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
@@ -44,6 +41,9 @@ public class EdgeNode{
 
     private SharedDatagramSocket edgeNetworkSocket;
     private EdgeNetworkWorkerThread[] edgeNetworkThreadPool;
+
+    private Measurement globalStats;
+    private Measurement localStats;
 
     private volatile boolean shutdown;
 

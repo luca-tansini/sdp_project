@@ -1,7 +1,11 @@
 package Sensor;
 
+import javax.xml.bind.annotation.XmlRootElement;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 
+@XmlRootElement
 public class Measurement implements Comparable<Measurement> {
 
     private String id;
@@ -15,6 +19,8 @@ public class Measurement implements Comparable<Measurement> {
         this.id=id;
         this.type=type;
     }
+
+    public Measurement(){}
 
     public double getValue() {
         return value;
@@ -55,7 +61,8 @@ public class Measurement implements Comparable<Measurement> {
         return thisTimestamp.compareTo(otherTimestamp);
     }
 
+    @Override
     public String toString(){
-        return value + " " + Instant.ofEpochMilli(timestamp);
+        return value + " " + LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault());
     }
 }
