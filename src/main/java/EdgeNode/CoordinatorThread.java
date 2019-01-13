@@ -17,19 +17,15 @@ import java.util.HashMap;
 //TODO: gestione statistiche
 public class CoordinatorThread extends Thread{
 
-    private EdgeNode parent;
-    private SharedDatagramSocket socket;
-    private SharedBuffer<CoordinatorMessage> buffer;
+    private StateModel stateModel;
     private Measurement global;
     private HashMap<String,Measurement> locals;
     private Object statsLock = new Object();
 
-    public CoordinatorThread(EdgeNode parent, SharedBuffer<CoordinatorMessage> buffer, SharedDatagramSocket socket) {
-        this.parent = parent;
-        this.buffer = buffer;
-        this.socket = socket;
+    public CoordinatorThread() {
+        this.stateModel = StateModel.getInstance();
         //Il global iniziale ha due valori non significativi
-        this.global = new Measurement("coordinator"+parent.getNodeId(), "global",0,0);
+        this.global = new Measurement("coordinator"+stateModel.parent.getNodeId(), "global",0,0);
         this.locals = new HashMap<>();
     }
 
@@ -49,7 +45,7 @@ public class CoordinatorThread extends Thread{
                 Client client = Client.create();
                 WebResource webResource = client.resource("http://localhost:4242/edgenetwork/statistics");
 
-                while(!parent.isShutdown()){
+                while(!stateModel.shutdown){
                     try{Thread.sleep(5000);} catch (InterruptedException e){e.printStackTrace();}
 
                     System.out.println("DEBUG: CoordinatorThread - Coordinatore si sveglia per inviare update");
@@ -74,7 +70,7 @@ public class CoordinatorThread extends Thread{
                         }
                         if(count != 0) {
                             mean /= count;
-                            global = new Measurement("coordinator" + parent.getNodeId(), "global", mean, Instant.now().toEpochMilli());
+                            global = new Measurement("coordinator" + stateModel.parent.getNodeId(), "global", mean, Instant.now().toEpochMilli());
                         }
                     }
 
@@ -106,15 +102,15 @@ public class CoordinatorThread extends Thread{
         }).start();
 
         //Legge gli update e risponde
-        while (!parent.isShutdown()){
-            CoordinatorMessage msg = buffer.take();
+        while (!stateModel.shutdown){
+            CoordinatorMessage msg = stateModel.coordinatorBuffer.take();
             System.out.println("Coordinator msg: "+msg.getMeasurement());
             synchronized (statsLock) {
                 this.locals.put(msg.getMeasurement().getId(), msg.getMeasurement());
             }
-            CoordinatorMessage response = new CoordinatorMessage(CoordinatorMessage.CoordinatorMessageType.ACK, parent.getRepresentation(), global);
+            CoordinatorMessage response = new CoordinatorMessage(CoordinatorMessage.CoordinatorMessageType.ACK, stateModel.parent.getRepresentation(), global);
             String json = gson.toJson(response, CoordinatorMessage.class);
-            socket.write(new DatagramPacket(json.getBytes(), json.length(), new InetSocketAddress(msg.getSender().getIpAddr(), msg.getSender().getNodesPort())));
+            stateModel.edgeNetworkSocket.write(new DatagramPacket(json.getBytes(), json.length(), new InetSocketAddress(msg.getSender().getIpAddr(), msg.getSender().getNodesPort())));
         }
     }
 }

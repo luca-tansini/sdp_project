@@ -9,24 +9,22 @@ import java.net.InetSocketAddress;
 
 public class EdgeNetworkWorkerThread extends Thread {
 
-    EdgeNode parent;
-    SharedDatagramSocket socket;
     Gson gson;
+    StateModel stateModel;
 
-    public EdgeNetworkWorkerThread(EdgeNode parent, SharedDatagramSocket socket) {
-        this.parent = parent;
-        this.socket = socket;
-        gson = new Gson();
+    public EdgeNetworkWorkerThread() {
+        this.gson = new Gson();
+        this.stateModel = StateModel.getInstance();
     }
 
     public void run(){
 
         byte buf[] = new byte[1024];
 
-        while(!parent.isShutdown()){
+        while(!stateModel.shutdown){
 
             DatagramPacket packet = new DatagramPacket(buf, buf.length);
-            socket.read(packet);
+            stateModel.edgeNetworkSocket.read(packet);
             String json = new String(packet.getData(),0,packet.getLength());
 
             EdgeNetworkMessage msg = gson.fromJson(json, EdgeNetworkMessage.class);
@@ -50,38 +48,40 @@ public class EdgeNetworkWorkerThread extends Thread {
                     break;
 
                 default:
-                    System.out.println("EdgeNetworkWorkerThread for EdgeNode"+parent.getNodeId()+ " got unknown request");
+                    System.out.println("EdgeNetworkWorkerThread for EdgeNode"+stateModel.parent.getNodeId()+ " got unknown request");
                     break;
             }
         }
     }
 
+
     public void handleHelloRequest(String msg){
         HelloMessage helloMessage = gson.fromJson(msg, HelloMessage.class);
         EdgeNodeRepresentation requestingNode = helloMessage.getRequestingNode();
-        if(!parent.getNodes().contains(requestingNode))
-            parent.getNodes().add(requestingNode);
+        if(!stateModel.nodes.contains(requestingNode))
+            stateModel.nodes.add(requestingNode);
         else{
             //Caso limite in cui qualcuno è morto e risorto prima che me ne rendessi conto
-            parent.getNodes().addSafety(requestingNode);
+            stateModel.nodes.addSafety(requestingNode);
         }
-        if(parent.isCoordinator()) {
-            String jsonResponse = gson.toJson(new HelloResponseMessage(parent.getRepresentation()));
-            socket.write(new DatagramPacket(jsonResponse.getBytes(), jsonResponse.length(), new InetSocketAddress(requestingNode.getIpAddr(), requestingNode.getNodesPort())));
+        if(stateModel.parent.isCoordinator()) {
+            String jsonResponse = gson.toJson(new HelloResponseMessage(stateModel.parent.getRepresentation()));
+            stateModel.edgeNetworkSocket.write(new DatagramPacket(jsonResponse.getBytes(), jsonResponse.length(), new InetSocketAddress(requestingNode.getIpAddr(), requestingNode.getNodesPort())));
         }
     }
+
 
     public void handleHelloResponse(String msg){
         HelloResponseMessage coordResponseMessage = gson.fromJson(msg, HelloResponseMessage.class);
         EdgeNodeRepresentation coord = coordResponseMessage.getCoordinator();
-        Object lock = parent.getHelloSequenceLock();
-        synchronized (lock) {
+        synchronized (stateModel.helloSequenceLock) {
             if (coord != null) {
-                parent.setCoordinator(coord);
-                lock.notify();
+                stateModel.setCoordinator(coord);
+                stateModel.helloSequenceLock.notify();
             }
         }
     }
+
 
     public void handleElectionMsg(String msg){
         ElectionMesssage electionMesssage = gson.fromJson(msg, ElectionMesssage.class);
@@ -90,59 +90,61 @@ public class EdgeNetworkWorkerThread extends Thread {
 
         switch (electionMesssage.getElectionMessageType()) {
 
+            //Quando ricevo un pacchetto election rispondo con un ALIVE_ACK e faccio partire un'elezione, se non ce n'è già una in corso
             case ELECTION:
-                String response = gson.toJson(new ElectionMesssage(ElectionMesssage.ElectionMessageType.ALIVE_ACK, parent.getRepresentation()));
-                socket.write(new DatagramPacket(response.getBytes(), response.length(), new InetSocketAddress(sender.getIpAddr(), sender.getNodesPort())));
-                synchronized (parent.getElectionStatusLock()) {
-                    if (parent.getElectionStatus() != EdgeNode.ElectionStatus.FINISHED)
+                String response = gson.toJson(new ElectionMesssage(ElectionMesssage.ElectionMessageType.ALIVE_ACK, stateModel.parent.getRepresentation()));
+                stateModel.edgeNetworkSocket.write(new DatagramPacket(response.getBytes(), response.length(), new InetSocketAddress(sender.getIpAddr(), sender.getNodesPort())));
+                synchronized (stateModel.electionStatusLock) {
+                    if (stateModel.electionStatus != StateModel.ElectionStatus.FINISHED)
                         break;
-                    parent.setElectionStatus(EdgeNode.ElectionStatus.STARTED);
+                    stateModel.electionStatus = StateModel.ElectionStatus.STARTED;
                 }
                 System.out.println("DEBUG: ho ricevuto pacchetto election, faccio partire elezione da WorkerThread");
-                //gestione della helloSequence
-                synchronized (parent.getHelloSequenceLock()) {
-                    parent.getHelloSequenceLock().notify();
+                //Gestione della helloSequence
+                synchronized (stateModel.helloSequenceLock) {
+                    stateModel.helloSequenceLock.notify();
                 }
-                parent.setAwaitingCoordinatorACK(false);
-                parent.setCoordinator(null);
+                stateModel.setAwaitingCoordinatorACK(false);
+                stateModel.setCoordinator(null);
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
-                        parent.bullyElection();
+                        stateModel.parent.bullyElection();
                     }
                 }).start();
                 break;
 
-            //Quando ricevo un pacchetto ACK, mi metto in stato TAKEN_CARE, se non lo ero già. Non posso riceverne da nodi sconosciuti
+            //Quando ricevo un pacchetto ACK, mi metto in stato TAKEN_CARE, se non lo ero già.
             case ALIVE_ACK:
-                synchronized (parent.getElectionStatusLock()) {
-                    if (parent.getElectionStatus() != EdgeNode.ElectionStatus.STARTED)
+                synchronized (stateModel.electionStatusLock) {
+                    if (stateModel.electionStatus != StateModel.ElectionStatus.STARTED)
                         break;
-                    parent.setElectionStatus(EdgeNode.ElectionStatus.TAKEN_CARE);
+                    stateModel.electionStatus = StateModel.ElectionStatus.TAKEN_CARE;
                 }
-                synchronized (parent.getElectionLock()){
-                    parent.getElectionLock().notify();
+                synchronized (stateModel.electionLock){
+                    stateModel.electionLock.notify();
                 }
                 break;
 
             //Quando ricevo un pacchetto VICTORY posso assumere che sia finita un'elezione e mi segno il nuovo coordinatore.
             case VICTORY:
                 System.out.println("DEBUG: EdgeNetworkWokerThread ho ricevuto pacchetto VICTORY");
-                synchronized (parent.getElectionStatusLock()){
-                    parent.setElectionStatus(EdgeNode.ElectionStatus.FINISHED);
+                synchronized (stateModel.electionStatusLock){
+                    stateModel.electionStatus = StateModel.ElectionStatus.FINISHED;
                 }
-                parent.setAwaitingCoordinatorACK(false);
-                parent.setCoordinator(sender);
-                synchronized (parent.getElectionLock()) {
-                    parent.getElectionLock().notify();
+                stateModel.setAwaitingCoordinatorACK(false);
+                stateModel.setCoordinator(sender);
+                synchronized (stateModel.electionLock){
+                    stateModel.electionLock.notify();
                 }
                 //gestione della helloSequence
-                synchronized (parent.getHelloSequenceLock()){
-                    parent.getHelloSequenceLock().notify();
+                synchronized (stateModel.helloSequenceLock) {
+                    stateModel.helloSequenceLock.notify();
                 }
                 break;
         }
     }
+
 
     public void handleCoordinatorMsg(String msg){
 
@@ -151,14 +153,12 @@ public class EdgeNetworkWorkerThread extends Thread {
         switch (coordinatorMessage.getCoordinatorMessageType()){
 
             case STATS_UPDATE:
-                parent.getCoordinatorBuffer().put(coordinatorMessage);
+                stateModel.coordinatorBuffer.put(coordinatorMessage);
                 break;
 
             case ACK:
-                parent.setAwaitingCoordinatorACK(false);
+                stateModel.setAwaitingCoordinatorACK(false);
                 break;
         }
-
     }
-
 }

@@ -44,7 +44,7 @@ public class SharedNodeList implements Iterable<EdgeNodeRepresentation>{
     }
 
     @Override
-    public Iterator<EdgeNodeRepresentation> iterator(){
+    public synchronized Iterator<EdgeNodeRepresentation> iterator(){
         return this.nodes.iterator();
     }
 

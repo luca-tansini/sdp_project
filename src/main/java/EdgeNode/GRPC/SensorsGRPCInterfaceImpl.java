@@ -1,16 +1,10 @@
 package EdgeNode.GRPC;
 
-import EdgeNode.EdgeNode;
+import EdgeNode.StateModel;
 import Sensor.Measurement;
 import io.grpc.stub.StreamObserver;
 
 public class SensorsGRPCInterfaceImpl extends SensorsGRPCInterfaceGrpc.SensorsGRPCInterfaceImplBase {
-
-    private EdgeNode parent;
-
-    public SensorsGRPCInterfaceImpl(EdgeNode parent){
-        this.parent = parent;
-    }
 
     @Override
     public io.grpc.stub.StreamObserver<SensorsGRPCInterfaceOuterClass.Measurement> sendMeasurement(io.grpc.stub.StreamObserver<SensorsGRPCInterfaceOuterClass.Null> responseObserver){
@@ -22,7 +16,7 @@ public class SensorsGRPCInterfaceImpl extends SensorsGRPCInterfaceGrpc.SensorsGR
                 //DEBUG
                 System.out.print(".");
                 Measurement m = new Measurement(value.getId(), value.getType(), value.getValue(), value.getTimestamp());
-                parent.getSensorsMeasurementBuffer().put(m);
+                StateModel.getInstance().sensorsMeasurementBuffer.put(m);
             }
 
             @Override
