@@ -3,7 +3,10 @@ package EdgeNode;
 import EdgeNode.EdgeNetworkMessage.CoordinatorMessage;
 import Sensor.Measurement;
 import ServerCloud.Model.EdgeNodeRepresentation;
+import ServerCloud.Model.Statistics;
 import io.grpc.Server;
+
+import java.util.HashMap;
 
 public class StateModel {
 
@@ -17,6 +20,7 @@ public class StateModel {
 
     private StateModel(){
         electionStatus = ElectionStatus.FINISHED;
+        stats = new Statistics();
     }
 
     //Riferimento al nodo padre e flag di shutdown
@@ -99,7 +103,9 @@ public class StateModel {
 
     public SharedBuffer<Measurement> sensorsMeasurementBuffer;
 
-    public Measurement globalStats;
-    public Measurement localStats;
+
+    //Gestione delle statistiche
+    public Statistics stats;
+    public Object statsLock = new Object();
 
 }

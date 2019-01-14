@@ -5,11 +5,11 @@ public class Model{
     private static Model instance;
 
     private Grid grid;
-    private Statistics stats;
+    private StatisticsHistory stats;
 
     private Model(){
         this.grid = new Grid(100,100);
-        this.stats = new Statistics();
+        this.stats = new StatisticsHistory();
     }
 
     public synchronized static Model getInstance(){
@@ -22,7 +22,7 @@ public class Model{
         return grid;
     }
 
-    public Statistics getStats() {
+    public StatisticsHistory getStats() {
         return stats;
     }
 }

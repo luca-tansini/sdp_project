@@ -19,6 +19,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Random;
+import java.util.Scanner;
 
 public class EdgeNode{
 
@@ -116,27 +117,8 @@ public class EdgeNode{
             helloSequence();
         }
 
-        //Loop di attesa interruzione
-        System.out.println("press a key to stop");
-        try {System.in.read();} catch (IOException e) {e.printStackTrace();}
-        System.out.println("stopping...");
-
-        //Manda al server la notifica di stop
-        Client client = Client.create();
-        WebResource webResource = client.resource("http://localhost:4242/edgenetwork/nodes/"+this.nodeId);
-        webResource.type("application/json").delete(ClientResponse.class);
-
-        stateModel.shutdown = true;
-        //TODO: dovrei gestire questa cosa con gli shutdown. Ma i thread in attesa sulle socket?
-        for(EdgeNetworkWorkerThread t: stateModel.edgeNetworkThreadPool)
-            t.stop();
-        if(this.isCoordinator() && stateModel.coordinatorThread != null)
-            stateModel.coordinatorThread.stop();
-        if(stateModel.coordinatorUpdatesThread != null)
-            stateModel.coordinatorUpdatesThread.stop();
-        stateModel.edgeNetworkSocket.close();
-        stateModel.gRPCServer.shutdownNow();
-
+        //Mostra il pannello
+        showPanel();
     }
 
 
@@ -152,17 +134,15 @@ public class EdgeNode{
         }
         if(stateModel.getCoordinator() != null){
             //Qualcuno mi ha detto di essere il coordinatore
-            System.out.println("DEBUG: HelloSequence got coordinator info: "+stateModel.getCoordinator());
+            System.out.println("got coordinator info: "+stateModel.getCoordinator());
         }
         else{
             synchronized (stateModel.electionStatusLock) {
                 if (stateModel.electionStatus != StateModel.ElectionStatus.FINISHED) {
                     //Sono stato coinvolto in un'elezione
-                    System.out.println("DEBUG: HelloSequence into election");
                     return;
                 }
                 //Non ho ricevuto niente da nessuno, faccio partire una mia elezione, alla peggio contatto nodi già in un'elezione e mi manderanno un ACK
-                System.out.println("DEBUG: HelloSequence is starting election after 15 seconds");
                 stateModel.electionStatus = StateModel.ElectionStatus.STARTED;
                 bullyElection();
             }
@@ -226,7 +206,6 @@ public class EdgeNode{
         //Manda pacchetti HELLO_ELECTION agli ID maggiori (e li salva in higherId)
         for(EdgeNodeRepresentation e: stateModel.nodes){
             if(e.getNodeId() > this.getNodeId()){
-                System.out.println("DEBUG: mando pacchetto al nodo: "+e.getNodeId());
                 higherId.add(e);
                 stateModel.edgeNetworkSocket.write(new DatagramPacket(electionMsg.getBytes(), electionMsg.length(), new InetSocketAddress(e.getIpAddr(), e.getNodesPort())));
             }
@@ -234,7 +213,6 @@ public class EdgeNode{
 
         //Se nessuno ha id maggiore ho vinto automaticamente
         if(higherId.size() == 0){
-            System.out.println("DEBUG: nessuno ha id maggiore del mio, sono io il coordinatore, mando i pacchetti VICTORY");
             synchronized (stateModel.electionStatusLock){
                 stateModel.electionStatus = StateModel.ElectionStatus.WON;
             }
@@ -257,7 +235,6 @@ public class EdgeNode{
         }
         else{
             //Aspetto 2 secondi
-            System.out.println("DEBUG: attendo risposte");
             try {
                 synchronized (stateModel.electionLock){
                     stateModel.electionLock.wait(2000);
@@ -266,13 +243,11 @@ public class EdgeNode{
             synchronized (stateModel.electionStatusLock){
                 //Se l'elezione è finita ho ricevuto un VICTORY packet e qualcuno sarà il coordinatore
                 if(stateModel.electionStatus == StateModel.ElectionStatus.FINISHED) {
-                    System.out.println("DEBUG: l'elezione è finita: devo aver ricevuto dei pacchetti VICTORY. Il nuovo coordinatore è: "+stateModel.getCoordinator());
                     return;
                 }
 
                 //Se non ho ricevuto nemmeno un ACK per due secondi posso assumere che siano tutti morti
                 if(stateModel.electionStatus == StateModel.ElectionStatus.STARTED){
-                    System.out.println("DEBUG: non ho ricevuto notizie da nessuno, assumo che tutti quelli che ho contattato siano morti e ricomincio");
                     failed = true;
                 }
             }
@@ -286,7 +261,6 @@ public class EdgeNode{
             }
 
             //Se invece ho ricevuto un ACK da qualcuno con id superiore al mio aspetto altri 5 secondi
-            System.out.println("Ho ricevuto ALIVE_ACK da qualcuno di superiore aspetto altri 5 secondi");
             try {
                 synchronized (stateModel.electionLock){
                     stateModel.electionLock.wait(5000);
@@ -295,12 +269,10 @@ public class EdgeNode{
             //Se dopo i 5 secondi l'elezione non è finita vuol dire che qualcuno è morto dopo aver mandato un ACK, ricomincio
             synchronized (stateModel.electionStatusLock){
                 if(stateModel.electionStatus == StateModel.ElectionStatus.FINISHED){
-                    System.out.println("DEBUG: dopo i 5 ho ricevuto dei pacchetti VICTORY");
                     return;
                 }
                 stateModel.electionStatus = StateModel.ElectionStatus.STARTED;
             }
-            System.out.println("DEBUG: qualcuno deve essere morto dopo aver mandato un ALIVE_ACK, ricomincio");
             bullyElection();
         }
     }
@@ -314,6 +286,43 @@ public class EdgeNode{
         stateModel.coordinatorBuffer = new SharedBuffer<CoordinatorMessage>();
         stateModel.coordinatorThread = new CoordinatorThread();
         stateModel.coordinatorThread.start();
+    }
+
+    public void showPanel(){
+
+        Scanner stdin = new Scanner(System.in);
+
+        while (true) {
+            System.out.print("\n\n\n\nPANNELLO DI CONTROLLO EDGENODE id:" + getNodeId());
+            if (isCoordinator()) {
+                System.out.print(" (coordinatore)");
+            }
+            System.out.println("\n\n"+stateModel.stats + "\n");
+            System.out.println("premi invo per aggiornare o x per uscire: ");
+
+            String in = stdin.nextLine();
+            if(in.equals("x"))
+                break;
+        }
+
+        System.out.println("stopping...");
+
+        //Manda al server la notifica di stop
+        Client client = Client.create();
+        WebResource webResource = client.resource("http://localhost:4242/edgenetwork/nodes/"+this.nodeId);
+        webResource.type("application/json").delete(ClientResponse.class);
+
+        stateModel.shutdown = true;
+        //TODO: dovrei gestire questa cosa con gli shutdown. Ma i thread in attesa sulle socket?
+        for(EdgeNetworkWorkerThread t: stateModel.edgeNetworkThreadPool)
+            t.stop();
+        if(this.isCoordinator() && stateModel.coordinatorThread != null)
+            stateModel.coordinatorThread.stop();
+        if(stateModel.coordinatorUpdatesThread != null)
+            stateModel.coordinatorUpdatesThread.stop();
+        stateModel.edgeNetworkSocket.close();
+        stateModel.gRPCServer.shutdownNow();
+
     }
 
     public void setPosition(Position position) {

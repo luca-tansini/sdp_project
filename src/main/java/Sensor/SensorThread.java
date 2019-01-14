@@ -35,19 +35,16 @@ public class SensorThread extends Thread {
 
         //Busy waiting (concessa) finchè non trova un nodo edge
         while (targetNode == null){
-            System.out.println("DEBUG: SensorThread"+position+" - trying to find nearest node");
             try{Thread.sleep(1000);} catch (InterruptedException e){e.printStackTrace();}
             response = webResource.type("application/json").post(ClientResponse.class, position);
             if(response.getStatus() != NOT_FOUND)
                 targetNode = response.getEntity(EdgeNodeRepresentation.class);
         }
 
-        System.out.println("DEBUG: SensorThread"+position+" - found nearest node: "+targetNode);
         //Costruisce lo stream di cui mantiene un riferimento per aggiornare il nodo più vicino
         stream = new PM10SimulatorStream(targetNode, position, serverAddr);
 
         //Lancia il PM10 simulator
-        System.out.println("DEBUG: SensorThread"+position+" - starting PM10Simulator");
         simulator = new PM10Simulator(stream);
         simulator.start();
 

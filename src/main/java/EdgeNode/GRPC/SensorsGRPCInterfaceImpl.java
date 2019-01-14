@@ -13,8 +13,6 @@ public class SensorsGRPCInterfaceImpl extends SensorsGRPCInterfaceGrpc.SensorsGR
             @Override
             public void onNext(SensorsGRPCInterfaceOuterClass.Measurement value) {
                 //Aggiunge la misurazione al buffer del parent
-                //DEBUG
-                System.out.print(".");
                 Measurement m = new Measurement(value.getId(), value.getType(), value.getValue(), value.getTimestamp());
                 StateModel.getInstance().sensorsMeasurementBuffer.put(m);
             }
@@ -23,9 +21,7 @@ public class SensorsGRPCInterfaceImpl extends SensorsGRPCInterfaceGrpc.SensorsGR
             public void onError(Throwable t) {}
 
             @Override
-            public void onCompleted() {
-                System.out.println("DEBUG: a sensor changed targetNode");
-            }
+            public void onCompleted() {}
         };
 
         return streamObserver;

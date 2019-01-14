@@ -99,7 +99,6 @@ public class EdgeNetworkWorkerThread extends Thread {
                         break;
                     stateModel.electionStatus = StateModel.ElectionStatus.STARTED;
                 }
-                System.out.println("DEBUG: ho ricevuto pacchetto election, faccio partire elezione da WorkerThread");
                 //Gestione della helloSequence
                 synchronized (stateModel.helloSequenceLock) {
                     stateModel.helloSequenceLock.notify();
@@ -128,7 +127,6 @@ public class EdgeNetworkWorkerThread extends Thread {
 
             //Quando ricevo un pacchetto VICTORY posso assumere che sia finita un'elezione e mi segno il nuovo coordinatore.
             case VICTORY:
-                System.out.println("DEBUG: EdgeNetworkWokerThread ho ricevuto pacchetto VICTORY");
                 synchronized (stateModel.electionStatusLock){
                     stateModel.electionStatus = StateModel.ElectionStatus.FINISHED;
                 }
@@ -158,6 +156,9 @@ public class EdgeNetworkWorkerThread extends Thread {
 
             case ACK:
                 stateModel.setAwaitingCoordinatorACK(false);
+                synchronized (stateModel.statsLock) {
+                    stateModel.stats.setGlobal(coordinatorMessage.getMeasurement());
+                }
                 break;
         }
     }

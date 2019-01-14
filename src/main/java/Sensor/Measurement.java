@@ -63,6 +63,11 @@ public class Measurement implements Comparable<Measurement> {
 
     @Override
     public String toString(){
-        return value + " " + LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault());
+        String out = String.format("%.3f ",value);
+        LocalDateTime ldt = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault());
+        out += ldt.getDayOfMonth() +"-"+ ldt.getMonth()+ "-" + ldt.getYear() + " ";
+        String s = ldt.toString();
+        out += s.substring(s.length()-12);
+        return out;
     }
 }

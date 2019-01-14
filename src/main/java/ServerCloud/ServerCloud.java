@@ -30,7 +30,7 @@ public class ServerCloud {
         fakeLocalList.add(new Measurement(47.5, 1000466));
         fakeLocal.put(43,fakeLocalList);
 
-        StateModel.getInstance().getStats().update(new Statistics(fakeGlobal,fakeLocal));
+        StateModel.getInstance().getStats().update(new StatisticsHistory(fakeGlobal,fakeLocal));
         //END DEBUG*/
 
         String HOST = args[0];

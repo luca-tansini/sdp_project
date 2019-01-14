@@ -32,7 +32,6 @@ public class CoordinatorUpdatesThread extends Thread {
 
             EdgeNodeRepresentation coordinator = stateModel.getCoordinator();
             if(coordinator != null && cached != null) {
-                System.out.println("DEBUG: CoordinatorUpdatesThread mando misurazione cached");
                 Measurement tmp = cached;
                 cached = null;
                 sendMeasurement(coordinator, tmp);
@@ -44,19 +43,25 @@ public class CoordinatorUpdatesThread extends Thread {
                 for(Measurement m: buffer)
                     mean += m.getValue();
                 Measurement measurement = new Measurement(stateModel.parent.getNodeId()+"", "local", mean/40, Instant.now().toEpochMilli());
-                //Sliding window, 50% overlap
-                for(int i=0; i<20; i++)
-                    buffer.remove(0);
 
                 coordinator = stateModel.getCoordinator();
                 if(coordinator != null) {
-                    System.out.println("DEBUG: CoordinatorUpdatesThread mando misurazione");
                     sendMeasurement(coordinator, measurement);
                 }
                 else{
                     //Non ha senso avere più di un valore cachato
                     this.cached = measurement;
                 }
+
+                //Aggiorna nel model la statistica locale
+                synchronized (stateModel.statsLock){
+                    stateModel.stats.getLocal().put(stateModel.parent.getNodeId()+"", measurement);
+                }
+
+                //Sliding window, 50% overlap
+                for(int i=0; i<20; i++)
+                    buffer.remove(0);
+
             }
         }
     }
@@ -70,7 +75,7 @@ public class CoordinatorUpdatesThread extends Thread {
             try{stateModel.coordinatorACKLock.wait(3000);} catch (InterruptedException e){e.printStackTrace();}
         }
         if(stateModel.isAwaitingCoordinatorACK()){
-            System.out.println("DEBUG: CoordinatorUpdatesThread: Il coordinatore è morto!");
+            System.out.println("DEBUG: CoordinatorUpdatesThread - Il coordinatore è morto!");
             cached = measurement;
             stateModel.setCoordinator(null);
             stateModel.setAwaitingCoordinatorACK(false);
@@ -79,7 +84,6 @@ public class CoordinatorUpdatesThread extends Thread {
                     return;
                 stateModel.electionStatus = STARTED;
             }
-            System.out.println("DEBUG: CoordinatorUpdatesThread: faccio partire elezione");
             stateModel.parent.bullyElection();
         }
     }

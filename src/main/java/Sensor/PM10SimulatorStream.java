@@ -41,7 +41,6 @@ public class PM10SimulatorStream implements SensorStream  {
 
     //Repeatedly asks CloudServer for nearestNode
     private void findTargetNode(){
-        System.out.println("DEBUG: PM10SimulatorStream"+position+" - trying to find nearest node");
         Client client = Client.create();
         WebResource webResource = client.resource("http://"+serverAddr+":4242/sensor/getnearestnode");
         ClientResponse response = webResource.type("application/json").post(ClientResponse.class, position);
@@ -52,14 +51,12 @@ public class PM10SimulatorStream implements SensorStream  {
         //Busy waiting (concessa) finchè non trova un nodo edge
         while (targetNode == null){
             try{Thread.sleep(1000);} catch (InterruptedException e){e.printStackTrace();}
-            System.out.println("DEBUG: PM10SimulatorStream"+position+" - trying to find nearest node");
             response = webResource.type("application/json").post(ClientResponse.class, position);
             if(response.getStatus() != NOT_FOUND)
                 targetNode = response.getEntity(EdgeNodeRepresentation.class);
         }
 
         if(this.getTargetNode() == null || !this.getTargetNode().equals(targetNode)) {
-            System.out.println("DEBUG: PM10SimulatorStream" + position + " - found nearest node: " + targetNode);
             updateTargetNode(targetNode);
         }
     }
@@ -76,8 +73,7 @@ public class PM10SimulatorStream implements SensorStream  {
             if(channel != null) {
                 channel.shutdown();
                 try{
-                    if(!channel.awaitTermination(2, TimeUnit.SECONDS))
-                        System.out.println("DEBUG: PM10SimulatorStream"+position+" - awaitTermination returned false");
+                    channel.awaitTermination(2, TimeUnit.SECONDS);
                 } catch (InterruptedException e){e.printStackTrace();}
                 channel = null;
             }
@@ -97,7 +93,6 @@ public class PM10SimulatorStream implements SensorStream  {
 
             @Override
             public void onError(Throwable t) {
-                System.out.println("DEBUG THROWABLE: "+t.getMessage());
                 //Se arriva un errore è perchè il server è morto e ha chiuso lo stream
                 synchronized (lock){
                     System.out.println("DEBUG: PM10SimulatorStream"+position+" - targetNode died!");
