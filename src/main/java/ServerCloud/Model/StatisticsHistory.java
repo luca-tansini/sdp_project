@@ -20,20 +20,46 @@ public class StatisticsHistory {
         this.local = local;
     }
 
-    //TODO: le statistiche più nuove andrebbero attaccate davanti, non in fondo
     public void update(Statistics s){
 
-        this.global.add(s.getGlobal());
+        this.global.add(0,s.getGlobal());
 
         for(String i: s.getLocal().keySet()){
             if(this.local.containsKey(i))
-                this.local.get(i).add(s.getLocal().get(i));
+                this.local.get(i).add(0,s.getLocal().get(i));
             else {
                 ArrayList<Measurement> l = new ArrayList<>();
                 l.add(s.getLocal().get(i));
                 this.local.put(i,l);
             }
         }
+    }
+
+    public StatisticsHistory getStatistics(int n){
+        ArrayList<Measurement> l;
+        l = this.global;
+        ArrayList<Measurement> global = (ArrayList<Measurement>) new ArrayList<>(l.subList(0, n<=l.size() ? n : l.size())).clone();
+
+        HashMap<String,ArrayList<Measurement>> local = new HashMap<>();
+        for(String id: this.local.keySet()) {
+            l = this.local.get(id);
+            local.put(id, (ArrayList<Measurement>) new ArrayList<>(l.subList(0, n<=l.size() ? n : l.size())).clone());
+        }
+
+        return new StatisticsHistory(global, local);
+    }
+
+    public ArrayList<Measurement> getGlobalStatistics(int n){
+        ArrayList<Measurement> l = this.global;
+        return (ArrayList<Measurement>) new ArrayList<>(l.subList(0, n<=l.size() ? n : l.size())).clone();
+    }
+
+    public ArrayList<Measurement> getLocalStatistics(String nodeId, int n) {
+        ArrayList<Measurement> l = this.local.get(nodeId);
+        if (l != null) {
+            return (ArrayList<Measurement>) new ArrayList<>(l.subList(0, n <= l.size() ? n : l.size())).clone();
+        } else
+            throw new IllegalArgumentException();
     }
 
     public void setGlobal(ArrayList<Measurement> global) {

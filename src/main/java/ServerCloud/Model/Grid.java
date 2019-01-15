@@ -10,7 +10,6 @@ public class Grid {
 
     private int XSize;
     private int YSize;
-    //Don't like this, JAXB sucks
     private NodeList nodes;
 
     public Grid(int XSize, int YSize){

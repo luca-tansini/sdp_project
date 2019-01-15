@@ -3,7 +3,6 @@ package ServerCloud.Services;
 import ServerCloud.Model.EdgeNodeRepresentation;
 import ServerCloud.Model.Model;
 import ServerCloud.Model.Statistics;
-import ServerCloud.Model.StatisticsHistory;
 
 import javax.ws.rs.*;
 import javax.ws.rs.core.Response;
@@ -53,13 +52,6 @@ public class EdgeNetworkServices {
     public Response updateStatistics(Statistics stats){
         Model.getInstance().getStats().update(stats);
         return Response.ok().build();
-    }
-
-    @Path("statistics")
-    @GET
-    @Produces({"application/json"})
-    public Response getStatistics(){
-        return Response.ok(Model.getInstance().getStats()).build();
     }
 
 }
