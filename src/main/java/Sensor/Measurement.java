@@ -4,6 +4,8 @@ import javax.xml.bind.annotation.XmlRootElement;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.TextStyle;
+import java.util.Locale;
 
 @XmlRootElement
 public class Measurement implements Comparable<Measurement> {
@@ -65,7 +67,7 @@ public class Measurement implements Comparable<Measurement> {
     public String toString(){
         String out = String.format("%.3f ",value);
         LocalDateTime ldt = LocalDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneId.systemDefault());
-        out += ldt.getDayOfMonth() +"-"+ ldt.getMonth()+ "-" + ldt.getYear() + " ";
+        out += ldt.getDayOfMonth() +"-"+ ldt.getMonth().getDisplayName(TextStyle.SHORT, Locale.ITALIAN)+ "-" + ldt.getYear() + " ";
         String s = ldt.toString();
         out += s.substring(s.length()-12);
         return out;

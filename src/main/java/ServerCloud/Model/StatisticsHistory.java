@@ -2,9 +2,11 @@ package ServerCloud.Model;
 
 import Sensor.Measurement;
 
+import javax.xml.bind.annotation.XmlRootElement;
 import java.util.ArrayList;
 import java.util.HashMap;
 
+@XmlRootElement
 public class StatisticsHistory {
 
     private ArrayList<Measurement> global;
@@ -38,26 +40,32 @@ public class StatisticsHistory {
     public StatisticsHistory getStatistics(int n){
         ArrayList<Measurement> l;
         l = this.global;
-        ArrayList<Measurement> global = (ArrayList<Measurement>) new ArrayList<>(l.subList(0, n<=l.size() ? n : l.size())).clone();
+        ArrayList<Measurement> global = new ArrayList<>();
+        global.addAll(l.subList(0, n<=l.size() ? n : l.size()));
 
         HashMap<String,ArrayList<Measurement>> local = new HashMap<>();
         for(String id: this.local.keySet()) {
             l = this.local.get(id);
-            local.put(id, (ArrayList<Measurement>) new ArrayList<>(l.subList(0, n<=l.size() ? n : l.size())).clone());
+            ArrayList<Measurement> k = new ArrayList<>();
+            k.addAll(l.subList(0, n<=l.size() ? n : l.size()));
+            local.put(id, k);
         }
-
         return new StatisticsHistory(global, local);
     }
 
     public ArrayList<Measurement> getGlobalStatistics(int n){
         ArrayList<Measurement> l = this.global;
-        return (ArrayList<Measurement>) new ArrayList<>(l.subList(0, n<=l.size() ? n : l.size())).clone();
+        ArrayList<Measurement> k = new ArrayList<>();
+        k.addAll(l.subList(0, n<=l.size() ? n : l.size()));
+        return k;
     }
 
     public ArrayList<Measurement> getLocalStatistics(String nodeId, int n) {
         ArrayList<Measurement> l = this.local.get(nodeId);
         if (l != null) {
-            return (ArrayList<Measurement>) new ArrayList<>(l.subList(0, n <= l.size() ? n : l.size())).clone();
+            ArrayList<Measurement> k = new ArrayList<>();
+            k.addAll(l.subList(0, n <= l.size() ? n : l.size()));
+            return k;
         } else
             throw new IllegalArgumentException();
     }
@@ -80,24 +88,15 @@ public class StatisticsHistory {
 
     @Override
     public String toString(){
-        String out = "StatisticsHistory:\n";
-        out += "    Global:\n       [";
-        for(int i=0; i<global.size(); i++) {
-            out += global.get(i);
-            if(i < global.size()-1)
-                out += ", ";
+        String out = "\n    Global:\n";
+        for(Measurement m: global) {
+            out += "        "+m+"\n";
         }
-        out += "]\n";
-        out += "    Local:\n";
+        out += "\n    Local:\n";
         for(String id: local.keySet()){
-            out += "        "+id+": [";
-            ArrayList l = local.get(id);
-            for(int i=0; i<l.size(); i++) {
-                out += l.get(i);
-                if(i < l.size()-1)
-                    out += ", ";
-            }
-            out+="]\n";
+            out += "        "+id+":\n";
+            for(Measurement m: local.get(id))
+                out += "            "+m+"\n";
         }
         return out;
     }
