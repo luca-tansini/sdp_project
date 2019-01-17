@@ -146,8 +146,8 @@ public class EdgeNode{
                 }
                 //Non ho ricevuto niente da nessuno, faccio partire una mia elezione, alla peggio contatto nodi già in un'elezione e mi manderanno un ACK
                 stateModel.electionStatus = StateModel.ElectionStatus.STARTED;
-                bullyElection();
             }
+            bullyElection();
         }
     }
 
