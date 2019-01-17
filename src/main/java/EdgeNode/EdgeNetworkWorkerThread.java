@@ -47,6 +47,9 @@ public class EdgeNetworkWorkerThread extends Thread {
                     handleCoordinatorMsg(json);
                     break;
 
+                case QUIT:
+                    break;
+
                 default:
                     System.out.println("EdgeNetworkWorkerThread for EdgeNode"+stateModel.parent.getNodeId()+ " got unknown request");
                     break;
@@ -151,7 +154,8 @@ public class EdgeNetworkWorkerThread extends Thread {
         switch (coordinatorMessage.getCoordinatorMessageType()){
 
             case STATS_UPDATE:
-                stateModel.coordinatorBuffer.put(coordinatorMessage);
+                if (stateModel.parent.isCoordinator())
+                    stateModel.coordinatorBuffer.put(coordinatorMessage);
                 break;
 
             case ACK:

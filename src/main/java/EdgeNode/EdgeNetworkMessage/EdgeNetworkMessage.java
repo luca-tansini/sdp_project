@@ -3,7 +3,7 @@ package EdgeNode.EdgeNetworkMessage;
 public class EdgeNetworkMessage {
 
     public enum MessageType{
-        HELLO, HELLO_RESPONSE, ELECTION, COORDINATOR
+        HELLO, HELLO_RESPONSE, ELECTION, COORDINATOR, QUIT
     }
 
     private MessageType type;

@@ -3,7 +3,6 @@ package EdgeNode;
 import EdgeNode.EdgeNetworkMessage.CoordinatorMessage;
 import Sensor.Measurement;
 import ServerCloud.Model.Statistics;
-import ServerCloud.Model.StatisticsHistory;
 import com.google.gson.Gson;
 import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
@@ -12,10 +11,8 @@ import com.sun.jersey.api.client.WebResource;
 import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.HashMap;
 
-//TODO: gestione statistiche
 public class CoordinatorThread extends Thread{
 
     private StateModel stateModel;
@@ -30,6 +27,8 @@ public class CoordinatorThread extends Thread{
 
         Gson gson = new Gson();
 
+        Object childLock = new Object();
+
         //Fa partire thread di timeout che scrive al server
         new Thread(new Runnable() {
             @Override
@@ -40,8 +39,15 @@ public class CoordinatorThread extends Thread{
                 Client client = Client.create();
                 WebResource webResource = client.resource("http://localhost:4242/edgenetwork/statistics");
 
-                while(!stateModel.shutdown){
-                    try{Thread.sleep(5000);} catch (InterruptedException e){e.printStackTrace();}
+                while(true){
+                    synchronized (childLock){
+                        try {
+                            childLock.wait(5000);
+                        } catch(InterruptedException e){
+                            e.printStackTrace();
+                        }
+                    }
+                    if(stateModel.shutdown) break;
 
                     HashMap<String, Measurement> statsLocal = new HashMap<>();
 
@@ -80,6 +86,13 @@ public class CoordinatorThread extends Thread{
         //Legge gli update e risponde
         while (!stateModel.shutdown){
             CoordinatorMessage msg = stateModel.coordinatorBuffer.take();
+            if(msg.getCoordinatorMessageType() == CoordinatorMessage.CoordinatorMessageType.QUIT) {
+                synchronized (childLock){
+                    childLock.notify();
+                }
+                break;
+            }
+
             synchronized (stateModel.statsLock) {
                 stateModel.stats.getLocal().put(msg.getMeasurement().getId(), msg.getMeasurement());
             }

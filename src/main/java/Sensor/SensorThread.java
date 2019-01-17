@@ -59,7 +59,6 @@ public class SensorThread extends Thread {
             if(response.getStatus() != NOT_FOUND) {
                 targetNode = gson.fromJson(response.getEntity(String.class),EdgeNodeRepresentation.class);
                 if(!targetNode.equals(stream.getTargetNode())) {
-                    System.out.println("DEBUG: SensorThread"+position+" - updating PM10SimulatorStream target node: "+targetNode);
                     stream.updateTargetNode(targetNode);
                 }
             }

@@ -21,6 +21,7 @@ public class PM10SimulatorStream implements SensorStream  {
     private Position position;
     private String serverAddr;
     private EdgeNodeRepresentation targetNode;
+    private String id;
     private Object lock = new Object();
     private Gson gson = new Gson();
 
@@ -67,6 +68,12 @@ public class PM10SimulatorStream implements SensorStream  {
     public void updateTargetNode(EdgeNodeRepresentation newTargetNode){
         synchronized (lock){
 
+            if(newTargetNode.equals(targetNode)){
+                return;
+            }
+
+            System.out.println("DEBUG: PM10Simulator["+id+","+position+"] - updating PM10SimulatorStream target node: "+newTargetNode);
+
             //Chiude la comunicazione precedente
             if(requestStream != null) {
                 requestStream.onCompleted();
@@ -97,7 +104,7 @@ public class PM10SimulatorStream implements SensorStream  {
             public void onError(Throwable t) {
                 //Se arriva un errore è perchè il server è morto e ha chiuso lo stream
                 synchronized (lock){
-                    System.out.println("DEBUG: PM10SimulatorStream"+position+" - targetNode died!");
+                    System.out.println("DEBUG: PM10Simulator["+id+","+position+"] - targetNode died!");
                     targetNode = null;
                     requestStream = null;
                     if(channel != null)
@@ -114,6 +121,8 @@ public class PM10SimulatorStream implements SensorStream  {
 
     @Override
     public void sendMeasurement(Measurement m) {
+
+       this.id = m.getId();
 
         SensorsGRPCInterfaceOuterClass.Measurement msg = SensorsGRPCInterfaceOuterClass.Measurement.newBuilder()
                 .setId(m.getId())

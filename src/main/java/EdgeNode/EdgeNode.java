@@ -3,6 +3,7 @@ package EdgeNode;
 import EdgeNode.EdgeNetworkMessage.CoordinatorMessage;
 import EdgeNode.EdgeNetworkMessage.ElectionMesssage;
 import EdgeNode.EdgeNetworkMessage.HelloMessage;
+import EdgeNode.EdgeNetworkMessage.QuitMessage;
 import EdgeNode.GRPC.SensorsGRPCInterfaceImpl;
 import Sensor.Measurement;
 import ServerCloud.Model.*;
@@ -11,6 +12,8 @@ import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
 import io.grpc.ServerBuilder;
+import sun.awt.geom.AreaOp;
+import sun.security.pkcs11.wrapper.CK_ATTRIBUTE;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -100,8 +103,7 @@ public class EdgeNode{
         }
 
         System.out.println("Couldn't join edge network, terminating");
-        //Stop sensorCommunication TODO:fare con shutdown
-        node.stateModel.coordinatorUpdatesThread.stop();
+        node.stateModel.sensorsMeasurementBuffer.put(new Measurement("quit","quit",0,0));
         node.stateModel.gRPCServer.shutdownNow();
     }
 
@@ -299,8 +301,10 @@ public class EdgeNode{
             if (isCoordinator()) {
                 System.out.print(" (coordinatore)");
             }
-            System.out.println("\n\n"+stateModel.stats + "\n");
-            System.out.println("premi invo per aggiornare o x per uscire: ");
+            synchronized (stateModel.statsLock) {
+                System.out.println("\n\n" + stateModel.stats + "\n");
+            }
+            System.out.println("premi invio per aggiornare o x per uscire: ");
 
             String in = stdin.nextLine();
             if(in.equals("x"))
@@ -315,16 +319,26 @@ public class EdgeNode{
         webResource.type("application/json").delete(ClientResponse.class);
 
         stateModel.shutdown = true;
-        //TODO: dovrei gestire questa cosa con gli shutdown. Ma i thread in attesa sulle socket?
-        for(EdgeNetworkWorkerThread t: stateModel.edgeNetworkThreadPool)
-            t.stop();
+        String jsonQuit = gson.toJson(new QuitMessage());
+        for(int i=0; i<stateModel.THREAD_POOL_SIZE; i++)
+            stateModel.edgeNetworkSocket.write(new DatagramPacket(jsonQuit.getBytes(), jsonQuit.length(), new InetSocketAddress(this.ipAddr,this.nodesPort)));
+
         if(this.isCoordinator() && stateModel.coordinatorThread != null)
-            stateModel.coordinatorThread.stop();
-        if(stateModel.coordinatorUpdatesThread != null)
-            stateModel.coordinatorUpdatesThread.stop();
+            stateModel.coordinatorBuffer.put(new CoordinatorMessage(CoordinatorMessage.CoordinatorMessageType.QUIT, null, null));
+
+        stateModel.sensorsMeasurementBuffer.put(new Measurement("quit","quit",0,0));
+
+        try {
+            for (EdgeNetworkWorkerThread t : stateModel.edgeNetworkThreadPool)
+                t.join();
+            if(stateModel.coordinatorThread != null)
+                stateModel.coordinatorThread.join();
+            stateModel.coordinatorUpdatesThread.join();
+        }
+        catch (InterruptedException e) {e.printStackTrace();}
+
         stateModel.edgeNetworkSocket.close();
         stateModel.gRPCServer.shutdownNow();
-
     }
 
     public void setPosition(Position position) {

@@ -3,7 +3,6 @@ package EdgeNode;
 import EdgeNode.EdgeNetworkMessage.CoordinatorMessage;
 import Sensor.Measurement;
 import ServerCloud.Model.EdgeNodeRepresentation;
-import ServerCloud.Model.Model;
 import com.google.gson.Gson;
 
 import java.net.DatagramPacket;
@@ -37,7 +36,10 @@ public class CoordinatorUpdatesThread extends Thread {
                 sendMeasurement(coordinator, tmp);
             }
 
-            buffer.add(stateModel.sensorsMeasurementBuffer.take());
+            Measurement tmp = stateModel.sensorsMeasurementBuffer.take();
+            if(tmp.getType().equals("quit"))
+                break;
+            buffer.add(tmp);
             if(buffer.size() == 40){
                 double mean = 0;
                 for(Measurement m: buffer)
@@ -74,7 +76,7 @@ public class CoordinatorUpdatesThread extends Thread {
             stateModel.setAwaitingCoordinatorACK(true);
             try{stateModel.coordinatorACKLock.wait(3000);} catch (InterruptedException e){e.printStackTrace();}
         }
-        if(stateModel.isAwaitingCoordinatorACK()){
+        if(stateModel.isAwaitingCoordinatorACK() && !stateModel.shutdown){
             System.out.println("DEBUG: CoordinatorUpdatesThread - Il coordinatore è morto!");
             cached = measurement;
             stateModel.setCoordinator(null);

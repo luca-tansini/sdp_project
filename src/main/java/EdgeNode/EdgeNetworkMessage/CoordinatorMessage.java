@@ -6,7 +6,7 @@ import ServerCloud.Model.EdgeNodeRepresentation;
 public class CoordinatorMessage extends EdgeNetworkMessage {
 
     public enum CoordinatorMessageType{
-        STATS_UPDATE, ACK
+        STATS_UPDATE, ACK, QUIT
     }
 
     private CoordinatorMessageType coordinatorMessageType;
