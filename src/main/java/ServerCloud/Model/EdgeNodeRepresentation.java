@@ -1,9 +1,5 @@
 package ServerCloud.Model;
 
-import javax.xml.bind.annotation.XmlRootElement;
-import java.lang.Math;
-
-@XmlRootElement
 public class EdgeNodeRepresentation {
 
     private Position position;
@@ -33,8 +29,6 @@ public class EdgeNodeRepresentation {
         return "node["+ nodeId + ", "+position+", " + ipAddr +"]";
     }
 
-
-    //Methods needed by JAXB
     public EdgeNodeRepresentation(){}
 
     public Position getPosition() {

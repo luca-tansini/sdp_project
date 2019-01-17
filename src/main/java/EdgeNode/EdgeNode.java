@@ -23,6 +23,8 @@ import java.util.Scanner;
 
 public class EdgeNode{
 
+    private static Gson gson = new Gson();
+
     private Position position;
     private int nodeId;
     private String ipAddr;
@@ -77,7 +79,7 @@ public class EdgeNode{
         for(int i=0; i<10; i++){
             nodeRepr.getPosition().setX(rng.nextInt(100));
             nodeRepr.getPosition().setY(rng.nextInt(100));
-            ClientResponse response = webResource.type("application/json").post(ClientResponse.class, nodeRepr);
+            ClientResponse response = webResource.type("application/json").post(ClientResponse.class, gson.toJson(nodeRepr));
             if(response.getStatus() != 200){
                 String error = response.getEntity(String.class);
                 if(error.equals(Grid.ID_TAKEN)){
@@ -88,8 +90,8 @@ public class EdgeNode{
             }
             else {
                 node.setPosition(nodeRepr.getPosition());
-                NodeList nodes = response.getEntity(NodeList.class);
-                node.stateModel.nodes = new SharedNodeList(nodes.getNodes());
+                NodeList nodes = gson.fromJson(response.getEntity(String.class), NodeList.class);
+                node.stateModel.nodes = new SafetyNodeList(nodes);
                 //Toglie se stesso dalla lista di nodi
                 node.stateModel.nodes.remove(node.getRepresentation());
                 node.startWork();
@@ -125,7 +127,7 @@ public class EdgeNode{
     private void helloSequence(){
         //Mando pachetti HELLO a tutti gli altri nodi
         for(EdgeNodeRepresentation node: stateModel.nodes){
-            String request = new Gson().toJson(new HelloMessage(this.getRepresentation()));
+            String request = gson.toJson(new HelloMessage(this.getRepresentation()));
             DatagramPacket packet = new DatagramPacket(request.getBytes(), request.length(), new InetSocketAddress(node.getIpAddr(), node.getNodesPort()));
             stateModel.edgeNetworkSocket.write(packet);
         }
@@ -201,7 +203,7 @@ public class EdgeNode{
         ArrayList<EdgeNodeRepresentation> higherId = new ArrayList<>();
 
         //Prepara un messaggio di HELLO_ELECTION
-        String electionMsg = new Gson().toJson(new ElectionMesssage(ElectionMesssage.ElectionMessageType.ELECTION, this.getRepresentation()));
+        String electionMsg = gson.toJson(new ElectionMesssage(ElectionMesssage.ElectionMessageType.ELECTION, this.getRepresentation()));
 
         //Manda pacchetti HELLO_ELECTION agli ID maggiori (e li salva in higherId)
         for(EdgeNodeRepresentation e: stateModel.nodes){
@@ -222,7 +224,7 @@ public class EdgeNode{
             this.startCoordinatorWork();
 
             //Manda in giro pacchetti VICTORY
-            String victoryMsg = new Gson().toJson(new ElectionMesssage(ElectionMesssage.ElectionMessageType.VICTORY, this.getRepresentation()));
+            String victoryMsg = gson.toJson(new ElectionMesssage(ElectionMesssage.ElectionMessageType.VICTORY, this.getRepresentation()));
             for (EdgeNodeRepresentation e: stateModel.nodes){
                 stateModel.edgeNetworkSocket.write(new DatagramPacket(victoryMsg.getBytes(), victoryMsg.length(), new InetSocketAddress(e.getIpAddr(), e.getNodesPort())));
             }

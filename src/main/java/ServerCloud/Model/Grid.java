@@ -1,12 +1,11 @@
 package ServerCloud.Model;
 
-import java.util.ArrayList;
-
 public class Grid {
 
     public static final String INVALID_POS = "positions must be between 0 and grid limits";
     public static final String ID_TAKEN = "ID already taken";
     public static final String NODE_TOO_CLOSE = "node is too close to another node (distance < 20)";
+    public static final String NOT_FOUND = "node not found";
 
     private int XSize;
     private int YSize;
@@ -18,61 +17,43 @@ public class Grid {
         this.nodes = new NodeList();
     }
 
-    public NodeList getNodeList(){
+    public NodeList getNodes() {
         return nodes;
     }
 
-    public ArrayList<EdgeNodeRepresentation> getNodes() {
-        return nodes.getNodes();
-    }
-
-    public synchronized void addNode(EdgeNodeRepresentation node){
+    public void addNode(EdgeNodeRepresentation node){
 
         Position pos = node.getPosition();
 
         if(pos.getX() < 0 || pos.getX() >= this.XSize || pos.getY() <0 || pos.getY() >= this.YSize)
             throw new IllegalArgumentException(INVALID_POS);
 
-        //Efficienza 0, whatever
-        for(EdgeNodeRepresentation e: this.getNodes())
+        //Controlla insieme che l'id non sia già occupato e che non ci sia un altro nodo vicino
+        for(EdgeNodeRepresentation e: this.getNodes()){
             if(e.getNodeId() == node.getNodeId())
                 throw new IllegalArgumentException(ID_TAKEN);
-
-        EdgeNodeRepresentation nearest = getNearestNode(node);
-        if(nearest != null && nearest.getDistance(node) < 20){
-            throw new IllegalArgumentException(NODE_TOO_CLOSE);
+            if(e.getPosition().getDistance(pos) < 20)
+                throw new IllegalArgumentException(NODE_TOO_CLOSE);
         }
-        this.getNodes().add(node);
+        this.nodes.add(node);
     }
 
-    public synchronized void removeNode(int nodeId){
-        for(EdgeNodeRepresentation n: this.getNodes())
-            if(n.getNodeId() == nodeId) {
-                this.getNodes().remove(n);
-                return;
-            }
-        throw new IllegalArgumentException("node not found");
+    public void removeNode(int nodeId){
+        if(!nodes.contains(nodeId))
+            throw new IllegalArgumentException(NOT_FOUND);
+        nodes.remove(nodeId);
     }
 
-    /*TODO: Nearest node non usa meccanismi di sincronizzazione, perchè
-    * quando viene chiamata fuori dalla addNode viene chiamata dai sensori
-    * e anche se dovesse dare un risultato sbagliato
-    * (nodo che non è il più vicino o nodo rimosso)
-    * il sensore si sistemerà automaticamente in pochi secondi*/
     public EdgeNodeRepresentation getNearestNode(Position pos){
         EdgeNodeRepresentation nearest = null;
         int nearestDist = this.XSize + this.YSize;
-        for(EdgeNodeRepresentation n: this.getNodes()) {
+        for(EdgeNodeRepresentation n: nodes) {
             if(n.getDistance(pos) < nearestDist){
                 nearest = n;
                 nearestDist = n.getDistance(pos);
             }
         }
         return nearest;
-    }
-
-    public EdgeNodeRepresentation getNearestNode(EdgeNodeRepresentation node){
-        return getNearestNode(node.getPosition());
     }
 
 }

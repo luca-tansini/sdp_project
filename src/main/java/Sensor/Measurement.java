@@ -1,13 +1,11 @@
 package Sensor;
 
-import javax.xml.bind.annotation.XmlRootElement;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.TextStyle;
 import java.util.Locale;
 
-@XmlRootElement
 public class Measurement implements Comparable<Measurement> {
 
     private String id;

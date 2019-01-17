@@ -6,8 +6,6 @@ import ServerCloud.Model.EdgeNodeRepresentation;
 import ServerCloud.Model.Statistics;
 import io.grpc.Server;
 
-import java.util.HashMap;
-
 public class StateModel {
 
     private static StateModel instance = null;
@@ -33,7 +31,7 @@ public class StateModel {
 
 
     //Lista dei nodi edge noti
-    public SharedNodeList nodes;
+    public SafetyNodeList nodes;
 
 
     //Lock per la sequenza iniziale

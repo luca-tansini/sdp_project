@@ -1,8 +1,5 @@
 package ServerCloud.Model;
 
-import javax.xml.bind.annotation.XmlRootElement;
-
-@XmlRootElement
 public class MeanStdevBean {
 
     private double mean;

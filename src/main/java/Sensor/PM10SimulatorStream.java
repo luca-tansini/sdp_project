@@ -4,6 +4,7 @@ import EdgeNode.GRPC.SensorsGRPCInterfaceGrpc;
 import EdgeNode.GRPC.SensorsGRPCInterfaceOuterClass;
 import ServerCloud.Model.EdgeNodeRepresentation;
 import ServerCloud.Model.Position;
+import com.google.gson.Gson;
 import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
@@ -21,6 +22,7 @@ public class PM10SimulatorStream implements SensorStream  {
     private String serverAddr;
     private EdgeNodeRepresentation targetNode;
     private Object lock = new Object();
+    private Gson gson = new Gson();
 
     ManagedChannel channel;
     StreamObserver<SensorsGRPCInterfaceOuterClass.Measurement> requestStream;
@@ -43,17 +45,17 @@ public class PM10SimulatorStream implements SensorStream  {
     private void findTargetNode(){
         Client client = Client.create();
         WebResource webResource = client.resource("http://"+serverAddr+":4242/sensor/getnearestnode");
-        ClientResponse response = webResource.type("application/json").post(ClientResponse.class, position);
+        ClientResponse response = webResource.type("application/json").post(ClientResponse.class, gson.toJson(position));
         EdgeNodeRepresentation targetNode = null;
         if(response.getStatus() != NOT_FOUND)
-            targetNode = response.getEntity(EdgeNodeRepresentation.class);
+            targetNode = gson.fromJson(response.getEntity(String.class),EdgeNodeRepresentation.class);
 
         //Busy waiting (concessa) finchè non trova un nodo edge
         while (targetNode == null){
             try{Thread.sleep(1000);} catch (InterruptedException e){e.printStackTrace();}
-            response = webResource.type("application/json").post(ClientResponse.class, position);
+            response = webResource.type("application/json").post(ClientResponse.class, gson.toJson(position));
             if(response.getStatus() != NOT_FOUND)
-                targetNode = response.getEntity(EdgeNodeRepresentation.class);
+                targetNode = gson.fromJson(response.getEntity(String.class),EdgeNodeRepresentation.class);
         }
 
         if(this.getTargetNode() == null || !this.getTargetNode().equals(targetNode)) {

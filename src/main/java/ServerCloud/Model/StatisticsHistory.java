@@ -2,11 +2,9 @@ package ServerCloud.Model;
 
 import Sensor.Measurement;
 
-import javax.xml.bind.annotation.XmlRootElement;
 import java.util.ArrayList;
 import java.util.HashMap;
 
-@XmlRootElement
 public class StatisticsHistory {
 
     private ArrayList<Measurement> global;
@@ -24,11 +22,17 @@ public class StatisticsHistory {
 
     public void update(Statistics s){
 
-        this.global.add(0,s.getGlobal());
+
+        synchronized (global){
+            this.global.add(0,s.getGlobal());
+        }
 
         for(String i: s.getLocal().keySet()){
-            if(this.local.containsKey(i))
-                this.local.get(i).add(0,s.getLocal().get(i));
+            if(this.local.containsKey(i)) {
+                synchronized (local.get(i)) {
+                    this.local.get(i).add(0, s.getLocal().get(i));
+                }
+            }
             else {
                 ArrayList<Measurement> l = new ArrayList<>();
                 l.add(s.getLocal().get(i));
@@ -41,13 +45,17 @@ public class StatisticsHistory {
         ArrayList<Measurement> l;
         l = this.global;
         ArrayList<Measurement> global = new ArrayList<>();
-        global.addAll(l.subList(0, n<=l.size() ? n : l.size()));
+        synchronized (l) {
+            global.addAll(l.subList(0, n <= l.size() ? n : l.size()));
+        }
 
         HashMap<String,ArrayList<Measurement>> local = new HashMap<>();
         for(String id: this.local.keySet()) {
             l = this.local.get(id);
             ArrayList<Measurement> k = new ArrayList<>();
-            k.addAll(l.subList(0, n<=l.size() ? n : l.size()));
+            synchronized (l) {
+                k.addAll(l.subList(0, n <= l.size() ? n : l.size()));
+            }
             local.put(id, k);
         }
         return new StatisticsHistory(global, local);
@@ -56,7 +64,9 @@ public class StatisticsHistory {
     public ArrayList<Measurement> getGlobalStatistics(int n){
         ArrayList<Measurement> l = this.global;
         ArrayList<Measurement> k = new ArrayList<>();
-        k.addAll(l.subList(0, n<=l.size() ? n : l.size()));
+        synchronized (l) {
+            k.addAll(l.subList(0, n <= l.size() ? n : l.size()));
+        }
         return k;
     }
 
@@ -64,7 +74,9 @@ public class StatisticsHistory {
         ArrayList<Measurement> l = this.local.get(nodeId);
         if (l != null) {
             ArrayList<Measurement> k = new ArrayList<>();
-            k.addAll(l.subList(0, n <= l.size() ? n : l.size()));
+            synchronized (l) {
+                k.addAll(l.subList(0, n <= l.size() ? n : l.size()));
+            }
             return k;
         } else
             throw new IllegalArgumentException();
@@ -89,14 +101,18 @@ public class StatisticsHistory {
     @Override
     public String toString(){
         String out = "\n    Global:\n";
-        for(Measurement m: global) {
-            out += "        "+m+"\n";
+        synchronized (global) {
+            for (Measurement m : global) {
+                out += "        " + m + "\n";
+            }
         }
         out += "\n    Local:\n";
         for(String id: local.keySet()){
             out += "        "+id+":\n";
-            for(Measurement m: local.get(id))
-                out += "            "+m+"\n";
+            synchronized (local.get(id)) {
+                for (Measurement m : local.get(id))
+                    out += "            " + m + "\n";
+            }
         }
         return out;
     }

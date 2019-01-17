@@ -3,6 +3,7 @@ package ServerCloud.Services;
 import ServerCloud.Model.EdgeNodeRepresentation;
 import ServerCloud.Model.Model;
 import ServerCloud.Model.Statistics;
+import com.google.gson.Gson;
 
 import javax.ws.rs.*;
 import javax.ws.rs.core.Response;
@@ -10,25 +11,29 @@ import javax.ws.rs.core.Response;
 @Path("edgenetwork")
 public class EdgeNetworkServices {
 
+    Gson gson = new Gson();
+
     @Path("nodes")
     @GET
     @Produces({"application/json"})
     public Response getNodes(){
-        return Response.ok(Model.getInstance().getGrid().getNodes()).build();
+        String json = gson.toJson(Model.getInstance().getGrid().getNodes());
+        return Response.ok(json).build();
     }
 
     @Path("nodes")
     @POST
     @Consumes({"application/json"})
     @Produces({"application/json"})
-    public Response addNode(EdgeNodeRepresentation node){
+    public Response addNode(String nodeJson){
+        EdgeNodeRepresentation node = gson.fromJson(nodeJson, EdgeNodeRepresentation.class);
         try{
             Model.getInstance().getGrid().addNode(node);
         } catch (IllegalArgumentException e){
             return  Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
         }
         System.out.println("ADD: "+node);
-        return Response.ok(Model.getInstance().getGrid().getNodeList()).build();
+        return Response.ok(gson.toJson(Model.getInstance().getGrid().getNodes())).build();
     }
 
     @Path("nodes/{id}")
@@ -39,9 +44,7 @@ public class EdgeNetworkServices {
         } catch (IllegalArgumentException e){
             return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
         }
-        //DEBUG
         System.out.println("REMOVE: "+nodeId);
-        //END DEBUG
         return Response.ok().build();
     }
 
@@ -49,9 +52,9 @@ public class EdgeNetworkServices {
     @Path("statistics")
     @POST
     @Consumes({"application/json"})
-    public Response updateStatistics(Statistics stats){
+    public Response updateStatistics(String statsJson){
+        Statistics stats = gson.fromJson(statsJson, Statistics.class);
         Model.getInstance().getStats().update(stats);
         return Response.ok().build();
     }
-
 }

@@ -9,7 +9,6 @@ public class HelloResponseMessage extends EdgeNetworkMessage {
     public HelloResponseMessage() {
     }
 
-    //Se coordinator è NULL vuol dire che ci sono delle elezioni in corso
     public HelloResponseMessage(EdgeNodeRepresentation coordinator){
         this.setType(MessageType.HELLO_RESPONSE);
         this.coordinator = coordinator;

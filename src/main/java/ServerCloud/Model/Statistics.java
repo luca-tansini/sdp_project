@@ -1,19 +1,12 @@
 package ServerCloud.Model;
 
 import Sensor.Measurement;
-import javax.xml.bind.annotation.XmlRootElement;
 import java.util.HashMap;
 
-@XmlRootElement
 public class Statistics {
 
     private Measurement global;
     private HashMap<String, Measurement> local;
-
-    public Statistics(Measurement global, HashMap<String, Measurement> local) {
-        this.global = global;
-        this.local = local;
-    }
 
     public Statistics(){
         this.local = new HashMap<>();

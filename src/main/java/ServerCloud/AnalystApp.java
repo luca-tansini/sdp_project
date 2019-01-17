@@ -57,8 +57,8 @@ public class AnalystApp {
                     response = client.resource(baseURL+"nodes").type("application/json").get(ClientResponse.class);
                     if(response.getStatus() == 200){
                         System.out.println("\nElenco dei nodi attivi:");
-                        NodeList l = response.getEntity(NodeList.class);
-                        for (EdgeNodeRepresentation e: l.getNodes())
+                        NodeList l = gson.fromJson(response.getEntity(String.class), NodeList.class);
+                        for (EdgeNodeRepresentation e: l)
                             System.out.println("    "+e);
                     }
                     else
@@ -76,7 +76,7 @@ public class AnalystApp {
                         break;
                     }
                     StatisticsHistory globalStats = gson.fromJson(response.getEntity(String.class), StatisticsHistory.class);
-                    System.out.println("\nStatitiche Globali ["+cmd[1]+"]:\n"+globalStats);
+                    System.out.println("\nStatistiche Globali ["+cmd[1]+"]:\n"+globalStats);
                     break;
 
                 case "globalmean":
@@ -89,7 +89,7 @@ public class AnalystApp {
                         System.out.println("errore REST: "+response.getEntity(String.class));
                         break;
                     }
-                    msb = response.getEntity(MeanStdevBean.class);
+                    msb = gson.fromJson(response.getEntity(String.class), MeanStdevBean.class);
                     System.out.println("\nStatistiche globali (ultime "+cmd[1]+" misurazioni)\n    media: "+msb.getMean()+" deviazione standard: "+msb.getStdev());
                     break;
 
@@ -125,7 +125,7 @@ public class AnalystApp {
                             System.out.println("errore REST: "+response.getEntity(String.class));
                         break;
                     }
-                    msb = response.getEntity(MeanStdevBean.class);
+                    msb = gson.fromJson(response.getEntity(String.class), MeanStdevBean.class);
                     System.out.println("\nStatistiche locali nodo"+cmd[1]+" (ultime "+cmd[2]+" misurazioni)\n    media: "+msb.getMean()+" deviazione standard: "+msb.getStdev());
                     break;
 
