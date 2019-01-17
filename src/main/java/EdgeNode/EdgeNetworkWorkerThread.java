@@ -68,7 +68,7 @@ public class EdgeNetworkWorkerThread extends Thread {
             stateModel.nodes.addSafety(requestingNode);
         }
         if(stateModel.parent.isCoordinator()) {
-            String jsonResponse = gson.toJson(new HelloResponseMessage(stateModel.parent.getRepresentation()));
+            String jsonResponse = gson.toJson(new HelloResponseMessage(stateModel.parent.getRepresentation(), stateModel.getLastElectionTimestamp()));
             stateModel.edgeNetworkSocket.write(new DatagramPacket(jsonResponse.getBytes(), jsonResponse.length(), new InetSocketAddress(requestingNode.getIpAddr(), requestingNode.getNodesPort())));
         }
     }
@@ -97,6 +97,10 @@ public class EdgeNetworkWorkerThread extends Thread {
             case ELECTION:
                 String response = gson.toJson(new ElectionMesssage(ElectionMesssage.ElectionMessageType.ALIVE_ACK, stateModel.parent.getRepresentation()));
                 stateModel.edgeNetworkSocket.write(new DatagramPacket(response.getBytes(), response.length(), new InetSocketAddress(sender.getIpAddr(), sender.getNodesPort())));
+                //Controlla che il pacchetto election non sia vecchio
+                if(electionMesssage.getTimestamp() <= stateModel.getLastElectionTimestamp()){
+                    break;
+                }
                 synchronized (stateModel.electionStatusLock) {
                     if (stateModel.electionStatus != StateModel.ElectionStatus.FINISHED)
                         break;
@@ -130,11 +134,16 @@ public class EdgeNetworkWorkerThread extends Thread {
 
             //Quando ricevo un pacchetto VICTORY posso assumere che sia finita un'elezione e mi segno il nuovo coordinatore.
             case VICTORY:
+                //Controlla che il pacchetto victory non sia vecchio
+                if(electionMesssage.getTimestamp() <= stateModel.getLastElectionTimestamp()){
+                    break;
+                }
                 synchronized (stateModel.electionStatusLock){
                     stateModel.electionStatus = StateModel.ElectionStatus.FINISHED;
                 }
                 stateModel.setAwaitingCoordinatorACK(false);
                 stateModel.setCoordinator(sender);
+                stateModel.setLastElectionTimestamp(electionMesssage.getTimestamp());
                 synchronized (stateModel.electionLock){
                     stateModel.electionLock.notify();
                 }

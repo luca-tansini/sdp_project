@@ -2,6 +2,8 @@ package EdgeNode.EdgeNetworkMessage;
 
 import ServerCloud.Model.EdgeNodeRepresentation;
 
+import java.time.Instant;
+
 public class ElectionMesssage extends EdgeNetworkMessage {
 
     public enum ElectionMessageType{
@@ -10,6 +12,7 @@ public class ElectionMesssage extends EdgeNetworkMessage {
 
     private ElectionMessageType electionMessageType;
     private EdgeNodeRepresentation sender;
+    private long timestamp;
 
     public ElectionMesssage() {
     }
@@ -18,6 +21,7 @@ public class ElectionMesssage extends EdgeNetworkMessage {
         this.setType(MessageType.ELECTION);
         this.electionMessageType = type;
         this.sender = sender;
+        this.timestamp = Instant.now().toEpochMilli();
     }
 
     public ElectionMessageType getElectionMessageType() {
@@ -26,6 +30,14 @@ public class ElectionMesssage extends EdgeNetworkMessage {
 
     public void setElectionMessageType(ElectionMessageType type) {
         this.electionMessageType = type;
+    }
+
+    public long getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(long timestamp) {
+        this.timestamp = timestamp;
     }
 
     public EdgeNodeRepresentation getSender() {

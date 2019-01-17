@@ -47,6 +47,20 @@ public class StateModel {
 
     public Object electionLock = new Object();
 
+    private long lastElectionTimestamp = 0;
+    private Object lastElectionTimestampLock = new Object();
+
+    public long getLastElectionTimestamp() {
+        synchronized (lastElectionTimestampLock) {
+            return lastElectionTimestamp;
+        }
+    }
+
+    public void setLastElectionTimestamp(long lastElectionTimestamp) {
+        synchronized (lastElectionTimestampLock) {
+            this.lastElectionTimestamp = lastElectionTimestamp;
+        }
+    }
 
     //Gestione della rete dei nodi Edge
     public SharedDatagramSocket edgeNetworkSocket;

@@ -20,6 +20,7 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Random;
 import java.util.Scanner;
@@ -86,8 +87,8 @@ public class EdgeNode{
             if(response.getStatus() != 200){
                 String error = response.getEntity(String.class);
                 if(error.equals(Grid.ID_TAKEN)){
-                    System.out.println(Grid.ID_TAKEN + " terminating...");
-                    return;
+                    System.out.println(Grid.ID_TAKEN);
+                    break;
                 }
                 System.out.println("Got error: "+error+". retrying...");
             }
@@ -114,6 +115,7 @@ public class EdgeNode{
 
         if(stateModel.nodes.size() == 0){
             stateModel.setCoordinator(this.getRepresentation());
+            stateModel.setLastElectionTimestamp(Instant.now().toEpochMilli());
             System.out.println("self proclaimed coordinator");
             startCoordinatorWork();
         }
@@ -226,10 +228,13 @@ public class EdgeNode{
             this.startCoordinatorWork();
 
             //Manda in giro pacchetti VICTORY
-            String victoryMsg = gson.toJson(new ElectionMesssage(ElectionMesssage.ElectionMessageType.VICTORY, this.getRepresentation()));
+            ElectionMesssage victory = new ElectionMesssage(ElectionMesssage.ElectionMessageType.VICTORY, this.getRepresentation());
+            String victoryMsg = gson.toJson(victory);
             for (EdgeNodeRepresentation e: stateModel.nodes){
                 stateModel.edgeNetworkSocket.write(new DatagramPacket(victoryMsg.getBytes(), victoryMsg.length(), new InetSocketAddress(e.getIpAddr(), e.getNodesPort())));
             }
+
+            stateModel.setLastElectionTimestamp(victory.getTimestamp());
 
             synchronized (stateModel.electionStatusLock){
                 stateModel.electionStatus = StateModel.ElectionStatus.FINISHED;
@@ -297,15 +302,15 @@ public class EdgeNode{
         Scanner stdin = new Scanner(System.in);
 
         while (true) {
-            System.out.print("\n\n\n\nPANNELLO DI CONTROLLO EDGENODE id:" + getNodeId());
+            System.out.println("\n\n\n\n\n\n\n\n\n\n\n\n");
+            System.out.print("PANNELLO DI CONTROLLO EDGENODE id:" + getNodeId());
             if (isCoordinator()) {
                 System.out.print(" (coordinatore)");
             }
             synchronized (stateModel.statsLock) {
-                System.out.println("\n\n" + stateModel.stats + "\n");
+                System.out.println("\n\n" + stateModel.stats + "\n\n\n\n\n\n");
             }
             System.out.println("premi invio per aggiornare o x per uscire: ");
-
             String in = stdin.nextLine();
             if(in.equals("x"))
                 break;
