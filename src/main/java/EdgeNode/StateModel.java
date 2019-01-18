@@ -48,7 +48,7 @@ public class StateModel {
     public Object electionLock = new Object();
 
     private long lastElectionTimestamp = 0;
-    private Object lastElectionTimestampLock = new Object();
+    private final Object lastElectionTimestampLock = new Object();
 
     public long getLastElectionTimestamp() {
         synchronized (lastElectionTimestampLock) {
@@ -66,9 +66,31 @@ public class StateModel {
     public SharedDatagramSocket edgeNetworkSocket;
     public EdgeNetworkWorkerThread[] edgeNetworkThreadPool;
     public static final int THREAD_POOL_SIZE = 5;
+    public volatile boolean edgeNetworkOnline;
 
+
+    //Gestione dell'albero dei nodi
+    public NetworkTree networkTree;
+    public final Object networkTreeLock = new Object();
+
+    //TODO: sincronizzare come coordinatore?
+    private EdgeNodeRepresentation networkTreeParent;
+    public final Object networkTreeParentLock = new Object();
+
+    public EdgeNodeRepresentation getNetworkTreeParent() {
+        synchronized (networkTreeParentLock) {
+            return networkTreeParent;
+        }
+    }
+
+    public void setNetworkTreeParent(EdgeNodeRepresentation networkTreeParent) {
+        synchronized (networkTreeParentLock) {
+            this.networkTreeParent = networkTreeParent;
+        }
+    }
 
     //Gestione del coordinatore
+    //TODO: cambiare sincronizzazione?
     private EdgeNodeRepresentation coordinator;
     public final Object coordinatorLock = new Object();
 
@@ -90,6 +112,7 @@ public class StateModel {
 
 
     //Gestione del thread che manda update al coordinatore
+    //TODO: cambiare nome e comportamento
     public Thread coordinatorUpdatesThread;
 
     private boolean awaitingCoordinatorACK;
@@ -111,6 +134,7 @@ public class StateModel {
 
 
     //Gestione della comunicazione coi sensori
+    public volatile boolean sensorCommunicationOnline;
     public Server gRPCServer;
 
     public SharedBuffer<Measurement> sensorsMeasurementBuffer;
@@ -118,6 +142,6 @@ public class StateModel {
 
     //Gestione delle statistiche
     public Statistics stats;
-    public Object statsLock = new Object();
+    public final Object statsLock = new Object();
 
 }

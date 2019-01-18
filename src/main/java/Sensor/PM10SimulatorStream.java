@@ -45,7 +45,7 @@ public class PM10SimulatorStream implements SensorStream  {
     //Repeatedly asks CloudServer for nearestNode
     private void findTargetNode(){
         Client client = Client.create();
-        WebResource webResource = client.resource("http://"+serverAddr+":4242/sensor/getnearestnode");
+        WebResource webResource = client.resource("http://"+serverAddr+":4242/sensor/gettargetnode");
         ClientResponse response = webResource.type("application/json").post(ClientResponse.class, gson.toJson(position));
         EdgeNodeRepresentation targetNode = null;
         if(response.getStatus() != NOT_FOUND)
@@ -53,7 +53,7 @@ public class PM10SimulatorStream implements SensorStream  {
 
         //Busy waiting (concessa) finchè non trova un nodo edge
         while (targetNode == null){
-            try{Thread.sleep(1000);} catch (InterruptedException e){e.printStackTrace();}
+            try{Thread.sleep(2000);} catch (InterruptedException e){e.printStackTrace();}
             response = webResource.type("application/json").post(ClientResponse.class, gson.toJson(position));
             if(response.getStatus() != NOT_FOUND)
                 targetNode = gson.fromJson(response.getEntity(String.class),EdgeNodeRepresentation.class);

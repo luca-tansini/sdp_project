@@ -30,7 +30,7 @@ public class SensorThread extends Thread {
 
         //Si collega al server per chiedere il nodo più vicino
         Client client = Client.create();
-        WebResource webResource = client.resource("http://"+serverAddr+":4242/sensor/getnearestnode");
+        WebResource webResource = client.resource("http://"+serverAddr+":4242/sensor/gettargetnode");
         ClientResponse response = webResource.type("application/json").post(ClientResponse.class, gson.toJson(position));
         EdgeNodeRepresentation targetNode = null;
         if(response.getStatus() != NOT_FOUND)

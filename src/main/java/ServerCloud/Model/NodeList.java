@@ -1,5 +1,7 @@
 package ServerCloud.Model;
 
+import EdgeNode.EdgeNode;
+
 import java.util.ArrayList;
 import java.util.Iterator;
 
@@ -38,6 +40,12 @@ public class NodeList implements Iterable<EdgeNodeRepresentation>{
         return false;
     }
 
+    public synchronized EdgeNodeRepresentation getById(int id){
+        for(EdgeNodeRepresentation node: nodes)
+            if(node.getNodeId() == id) return node;
+        return null;
+    }
+
     public synchronized EdgeNodeRepresentation get(int i) {
         return this.nodes.get(i);
     }
@@ -46,7 +54,7 @@ public class NodeList implements Iterable<EdgeNodeRepresentation>{
         this.nodes.remove(node);
     }
 
-    public synchronized void remove(int id){
+    public synchronized void removeById(int id){
         for(EdgeNodeRepresentation n: nodes)
             if(n.getNodeId() == id) {
                 nodes.remove(n);

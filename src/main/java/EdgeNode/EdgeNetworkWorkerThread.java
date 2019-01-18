@@ -47,6 +47,10 @@ public class EdgeNetworkWorkerThread extends Thread {
                     handleCoordinatorMsg(json);
                     break;
 
+                case TREE:
+                    handleTreeMsg(json);
+                    break;
+
                 case QUIT:
                     break;
 
@@ -68,20 +72,21 @@ public class EdgeNetworkWorkerThread extends Thread {
             stateModel.nodes.addSafety(requestingNode);
         }
         if(stateModel.parent.isCoordinator()) {
-            String jsonResponse = gson.toJson(new HelloResponseMessage(stateModel.parent.getRepresentation(), stateModel.getLastElectionTimestamp()));
-            stateModel.edgeNetworkSocket.write(new DatagramPacket(jsonResponse.getBytes(), jsonResponse.length(), new InetSocketAddress(requestingNode.getIpAddr(), requestingNode.getNodesPort())));
+            //Se il padre è il coordinatore/radice devo aggiungere il nodo nell'albero e rispondere con le info su coordinatore e ruolo nell'albero
+            stateModel.parent.addNetworkTreeNode(requestingNode);
         }
     }
 
-
+    //Quando mi arriva una HELLO_RESPONSE sono per forza una foglia
     public void handleHelloResponse(String msg){
         HelloResponseMessage coordResponseMessage = gson.fromJson(msg, HelloResponseMessage.class);
         EdgeNodeRepresentation coord = coordResponseMessage.getCoordinator();
+        //Si segna chi sono il parent e il coordinatore e fa partire la comunicazione con i sensori
+        stateModel.setNetworkTreeParent(coordResponseMessage.getParent());
+        stateModel.setCoordinator(coord);
+        stateModel.parent.startSensorsCommunication();
         synchronized (stateModel.helloSequenceLock) {
-            if (coord != null) {
-                stateModel.setCoordinator(coord);
-                stateModel.helloSequenceLock.notify();
-            }
+            stateModel.helloSequenceLock.notify();
         }
     }
 
@@ -175,4 +180,30 @@ public class EdgeNetworkWorkerThread extends Thread {
                 break;
         }
     }
+
+    private void handleTreeMsg(String msg) {
+
+        TreeMessage treeMessage = gson.fromJson(msg, TreeMessage.class);
+
+        switch (treeMessage.getTreeNodeType()){
+
+            /*
+             * TODO: è possibile ricevere una demozione? Cioè passare da nodo interno a foglia?
+             * Dipende se voglio implementare il riconoscimento dell'abbandono dei nodi figli
+             */
+            case LEAF:
+                //Si segna chi è il parent e fa partire la comunicazione con i sensori
+                stateModel.setNetworkTreeParent(treeMessage.getParent());
+                stateModel.parent.startSensorsCommunication();
+                break;
+
+            case INTERNAL:
+                stateModel.parent.stopSensorsCommunication();
+                stateModel.parent.startInternalNodeWork();
+                break;
+
+        }
+
+    }
+
 }

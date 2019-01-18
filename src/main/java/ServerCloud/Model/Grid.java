@@ -10,11 +10,16 @@ public class Grid {
     private int XSize;
     private int YSize;
     private NodeList nodes;
+    private NodeList leaves;
 
     public Grid(int XSize, int YSize){
         this.XSize = XSize;
         this.YSize = YSize;
         this.nodes = new NodeList();
+    }
+
+    public NodeList getLeaves(){
+        return leaves;
     }
 
     public NodeList getNodes() {
@@ -41,16 +46,17 @@ public class Grid {
     public void removeNode(int nodeId){
         if(!nodes.contains(nodeId))
             throw new IllegalArgumentException(NOT_FOUND);
-        nodes.remove(nodeId);
+        nodes.removeById(nodeId);
+        leaves.removeById(nodeId);
     }
 
-    public EdgeNodeRepresentation getNearestNode(Position pos){
+    public EdgeNodeRepresentation getSensorTargetNode(Position sensorPos){
         EdgeNodeRepresentation nearest = null;
         int nearestDist = this.XSize + this.YSize;
-        for(EdgeNodeRepresentation n: nodes) {
-            if(n.getDistance(pos) < nearestDist){
+        for(EdgeNodeRepresentation n: leaves) {
+            if(n.getDistance(sensorPos) < nearestDist){
                 nearest = n;
-                nearestDist = n.getDistance(pos);
+                nearestDist = n.getDistance(sensorPos);
             }
         }
         return nearest;
