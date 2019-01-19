@@ -4,17 +4,25 @@ import ServerCloud.Model.EdgeNodeRepresentation;
 
 public class TreeMessage extends EdgeNetworkMessage{
 
-    public enum TreeNodeType{
-        LEAF,INTERNAL
+    public enum TreeMessageType {
+        LEAF,INTERNAL,PARENT_DOWN, PARENT_UPDATE
     }
 
-    private TreeNodeType treeNodeType;
+    private TreeMessageType treeMessageType;
     private EdgeNodeRepresentation parent;
+    private EdgeNodeRepresentation sender;
 
-    public TreeMessage(TreeNodeType nodeType, EdgeNodeRepresentation parent){
+    public TreeMessage(TreeMessageType treeMessageType, EdgeNodeRepresentation parent){
         this.setType(MessageType.TREE);
-        this.treeNodeType = nodeType;
+        this.treeMessageType = treeMessageType;
         this.parent = parent;
+    }
+
+    public TreeMessage(TreeMessageType treeMessageType, EdgeNodeRepresentation parent, EdgeNodeRepresentation sender){
+        this.setType(MessageType.TREE);
+        this.treeMessageType = treeMessageType;
+        this.parent = parent;
+        this.sender = sender;
     }
 
     public EdgeNodeRepresentation getParent() {
@@ -25,11 +33,19 @@ public class TreeMessage extends EdgeNetworkMessage{
         this.parent = parent;
     }
 
-    public TreeNodeType getTreeNodeType() {
-        return treeNodeType;
+    public TreeMessageType getTreeMessageType() {
+        return treeMessageType;
     }
 
-    public void setTreeNodeType(TreeNodeType treeNodeType) {
-        this.treeNodeType = treeNodeType;
+    public void setTreeMessageType(TreeMessageType treeMessageType) {
+        this.treeMessageType = treeMessageType;
+    }
+
+    public EdgeNodeRepresentation getSender() {
+        return sender;
+    }
+
+    public void setSender(EdgeNodeRepresentation sender) {
+        this.sender = sender;
     }
 }

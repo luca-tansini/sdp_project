@@ -16,6 +16,7 @@ public class Grid {
         this.XSize = XSize;
         this.YSize = YSize;
         this.nodes = new NodeList();
+        this.leaves = new NodeList();
     }
 
     public NodeList getLeaves(){

@@ -5,11 +5,21 @@ import java.util.HashMap;
 
 public class Statistics {
 
+    //TODO: usare localmean
     private Measurement global;
+    private Measurement localMean;
     private HashMap<String, Measurement> local;
 
     public Statistics(){
         this.local = new HashMap<>();
+    }
+
+    public Measurement getLocalMean() {
+        return localMean;
+    }
+
+    public void setLocalMean(Measurement localMean) {
+        this.localMean = localMean;
     }
 
     public Measurement getGlobal() {

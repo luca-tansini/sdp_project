@@ -12,7 +12,7 @@ public class SensorsGRPCInterfaceImpl extends SensorsGRPCInterfaceGrpc.SensorsGR
         StreamObserver<SensorsGRPCInterfaceOuterClass.Measurement> streamObserver = new StreamObserver<SensorsGRPCInterfaceOuterClass.Measurement>() {
             @Override
             public void onNext(SensorsGRPCInterfaceOuterClass.Measurement value) {
-                //Aggiunge la misurazione al buffer del parent
+                //Aggiunge la misurazione al buffer del edgeNode
                 Measurement m = new Measurement(value.getId(), value.getType(), value.getValue(), value.getTimestamp());
                 StateModel.getInstance().sensorsMeasurementBuffer.put(m);
             }

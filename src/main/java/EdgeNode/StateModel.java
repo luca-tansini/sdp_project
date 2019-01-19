@@ -1,10 +1,12 @@
 package EdgeNode;
 
-import EdgeNode.EdgeNetworkMessage.CoordinatorMessage;
+import EdgeNode.EdgeNetworkMessage.ParentMessage;
 import Sensor.Measurement;
 import ServerCloud.Model.EdgeNodeRepresentation;
 import ServerCloud.Model.Statistics;
 import io.grpc.Server;
+
+import java.util.HashMap;
 
 public class StateModel {
 
@@ -21,11 +23,8 @@ public class StateModel {
         stats = new Statistics();
     }
 
-    //Riferimento al nodo padre e flag di shutdown
-    EdgeNode parent;
-    public EdgeNode getParent() {
-        return parent;
-    }
+    //Riferimento all'Edgenode e flag di shutdown
+    public EdgeNode edgeNode;
 
     public volatile boolean shutdown;
 
@@ -45,7 +44,7 @@ public class StateModel {
     public ElectionStatus electionStatus;
     public final Object electionStatusLock = new Object();
 
-    public Object electionLock = new Object();
+    public final Object electionLock = new Object();
 
     private long lastElectionTimestamp = 0;
     private final Object lastElectionTimestampLock = new Object();
@@ -73,7 +72,6 @@ public class StateModel {
     public NetworkTree networkTree;
     public final Object networkTreeLock = new Object();
 
-    //TODO: sincronizzare come coordinatore?
     private EdgeNodeRepresentation networkTreeParent;
     public final Object networkTreeParentLock = new Object();
 
@@ -90,7 +88,6 @@ public class StateModel {
     }
 
     //Gestione del coordinatore
-    //TODO: cambiare sincronizzazione?
     private EdgeNodeRepresentation coordinator;
     public final Object coordinatorLock = new Object();
 
@@ -106,29 +103,30 @@ public class StateModel {
         }
     }
 
-    public CoordinatorThread coordinatorThread;
 
-    public SharedBuffer<CoordinatorMessage> coordinatorBuffer;
+    //Gestione del comportamento da nodo interno
+    public InternalNodeThread internalNodeThread;
+    public SharedBuffer<ParentMessage> internalNodeBuffer;
+    public boolean isInternalNode = false;
 
 
-    //Gestione del thread che manda update al coordinatore
-    //TODO: cambiare nome e comportamento
-    public Thread coordinatorUpdatesThread;
+    //Gestione del thread che manda update al parent
+    public ParentUpdatesThread parentUpdatesThread;
 
-    private boolean awaitingCoordinatorACK;
-    public final Object coordinatorACKLock = new Object();
+    private boolean awaitingParentACK;
+    public final Object parentACKLock = new Object();
 
-    public boolean isAwaitingCoordinatorACK() {
-        synchronized (coordinatorACKLock) {
-            return awaitingCoordinatorACK;
+    public boolean isAwaitingParentACK() {
+        synchronized (parentACKLock) {
+            return awaitingParentACK;
         }
     }
 
-    public void setAwaitingCoordinatorACK(boolean awaitingCoordinatorACK) {
-        synchronized (coordinatorACKLock) {
-            this.awaitingCoordinatorACK = awaitingCoordinatorACK;
-            if(awaitingCoordinatorACK == false)
-                coordinatorACKLock.notify();
+    public void setAwaitingParentACK(boolean awaitingParentACK) {
+        synchronized (parentACKLock) {
+            this.awaitingParentACK = awaitingParentACK;
+            if(awaitingParentACK == false)
+                parentACKLock.notify();
         }
     }
 
@@ -141,7 +139,9 @@ public class StateModel {
 
 
     //Gestione delle statistiche
-    public Statistics stats;
+    public Statistics stats;                                    //dentro a stats.local ci sono tutte le misurazioni dei figli dei figli
+    public HashMap<String,Measurement> childLocalMeans;         //dentro a childLocalMeans ci sono le misurazioni dei figli diretti
+    public Measurement localMean;                               //dentro a localMean c'è la media locale
     public final Object statsLock = new Object();
 
 }

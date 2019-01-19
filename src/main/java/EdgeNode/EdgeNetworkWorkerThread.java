@@ -9,8 +9,8 @@ import java.net.InetSocketAddress;
 
 public class EdgeNetworkWorkerThread extends Thread {
 
-    Gson gson;
-    StateModel stateModel;
+    private Gson gson;
+    private StateModel stateModel;
 
     public EdgeNetworkWorkerThread() {
         this.gson = new Gson();
@@ -19,9 +19,9 @@ public class EdgeNetworkWorkerThread extends Thread {
 
     public void run(){
 
-        byte buf[] = new byte[1024];
+        byte[] buf = new byte[1024];
 
-        while(!stateModel.shutdown){
+        while(stateModel.edgeNetworkOnline){
 
             DatagramPacket packet = new DatagramPacket(buf, buf.length);
             stateModel.edgeNetworkSocket.read(packet);
@@ -43,8 +43,8 @@ public class EdgeNetworkWorkerThread extends Thread {
                     handleElectionMsg(json);
                     break;
 
-                case COORDINATOR:
-                    handleCoordinatorMsg(json);
+                case PARENT:
+                    handleParentMsg(json);
                     break;
 
                 case TREE:
@@ -53,16 +53,12 @@ public class EdgeNetworkWorkerThread extends Thread {
 
                 case QUIT:
                     break;
-
-                default:
-                    System.out.println("EdgeNetworkWorkerThread for EdgeNode"+stateModel.parent.getNodeId()+ " got unknown request");
-                    break;
             }
         }
     }
 
 
-    public void handleHelloRequest(String msg){
+    private void handleHelloRequest(String msg){
         HelloMessage helloMessage = gson.fromJson(msg, HelloMessage.class);
         EdgeNodeRepresentation requestingNode = helloMessage.getRequestingNode();
         if(!stateModel.nodes.contains(requestingNode))
@@ -71,27 +67,27 @@ public class EdgeNetworkWorkerThread extends Thread {
             //Caso limite in cui qualcuno è morto e risorto prima che me ne rendessi conto
             stateModel.nodes.addSafety(requestingNode);
         }
-        if(stateModel.parent.isCoordinator()) {
+        if(stateModel.edgeNode.isCoordinator()) {
             //Se il padre è il coordinatore/radice devo aggiungere il nodo nell'albero e rispondere con le info su coordinatore e ruolo nell'albero
-            stateModel.parent.addNetworkTreeNode(requestingNode);
+            stateModel.edgeNode.addNetworkTreeNode(requestingNode);
         }
     }
 
     //Quando mi arriva una HELLO_RESPONSE sono per forza una foglia
-    public void handleHelloResponse(String msg){
+    private void handleHelloResponse(String msg){
         HelloResponseMessage coordResponseMessage = gson.fromJson(msg, HelloResponseMessage.class);
         EdgeNodeRepresentation coord = coordResponseMessage.getCoordinator();
-        //Si segna chi sono il parent e il coordinatore e fa partire la comunicazione con i sensori
+        //Si segna chi sono il edgeNode e il coordinatore e fa partire la comunicazione con i sensori
         stateModel.setNetworkTreeParent(coordResponseMessage.getParent());
         stateModel.setCoordinator(coord);
-        stateModel.parent.startSensorsCommunication();
+        stateModel.edgeNode.startSensorsCommunication();
         synchronized (stateModel.helloSequenceLock) {
             stateModel.helloSequenceLock.notify();
         }
     }
 
 
-    public void handleElectionMsg(String msg){
+    private void handleElectionMsg(String msg){
         ElectionMesssage electionMesssage = gson.fromJson(msg, ElectionMesssage.class);
 
         EdgeNodeRepresentation sender = electionMesssage.getSender();
@@ -100,7 +96,7 @@ public class EdgeNetworkWorkerThread extends Thread {
 
             //Quando ricevo un pacchetto election rispondo con un ALIVE_ACK e faccio partire un'elezione, se non ce n'è già una in corso
             case ELECTION:
-                String response = gson.toJson(new ElectionMesssage(ElectionMesssage.ElectionMessageType.ALIVE_ACK, stateModel.parent.getRepresentation()));
+                String response = gson.toJson(new ElectionMesssage(ElectionMesssage.ElectionMessageType.ALIVE_ACK, stateModel.edgeNode.getRepresentation()));
                 stateModel.edgeNetworkSocket.write(new DatagramPacket(response.getBytes(), response.length(), new InetSocketAddress(sender.getIpAddr(), sender.getNodesPort())));
                 //Controlla che il pacchetto election non sia vecchio
                 if(electionMesssage.getTimestamp() <= stateModel.getLastElectionTimestamp()){
@@ -115,12 +111,13 @@ public class EdgeNetworkWorkerThread extends Thread {
                 synchronized (stateModel.helloSequenceLock) {
                     stateModel.helloSequenceLock.notify();
                 }
-                stateModel.setAwaitingCoordinatorACK(false);
+                stateModel.setAwaitingParentACK(false);
+                stateModel.setNetworkTreeParent(null);
                 stateModel.setCoordinator(null);
                 new Thread(new Runnable() {
                     @Override
                     public void run() {
-                        stateModel.parent.bullyElection();
+                        stateModel.edgeNode.bullyElection();
                     }
                 }).start();
                 break;
@@ -146,7 +143,9 @@ public class EdgeNetworkWorkerThread extends Thread {
                 synchronized (stateModel.electionStatusLock){
                     stateModel.electionStatus = StateModel.ElectionStatus.FINISHED;
                 }
-                stateModel.setAwaitingCoordinatorACK(false);
+                stateModel.setAwaitingParentACK(false);
+                //Setto il parent a null perchè appena il nuovo coordinatore ha ricostruito l'albero mi manderà un pacchetto TREE
+                stateModel.setNetworkTreeParent(null);
                 stateModel.setCoordinator(sender);
                 stateModel.setLastElectionTimestamp(electionMesssage.getTimestamp());
                 synchronized (stateModel.electionLock){
@@ -161,21 +160,22 @@ public class EdgeNetworkWorkerThread extends Thread {
     }
 
 
-    public void handleCoordinatorMsg(String msg){
+    public void handleParentMsg(String msg){
 
-        CoordinatorMessage coordinatorMessage = gson.fromJson(msg, CoordinatorMessage.class);
+        ParentMessage parentMessage = gson.fromJson(msg, ParentMessage.class);
 
-        switch (coordinatorMessage.getCoordinatorMessageType()){
+        switch (parentMessage.getParentMessageType()){
 
             case STATS_UPDATE:
-                if (stateModel.parent.isCoordinator())
-                    stateModel.coordinatorBuffer.put(coordinatorMessage);
+                if (stateModel.edgeNode.isCoordinator())
+                    stateModel.internalNodeBuffer.put(parentMessage);
                 break;
 
             case ACK:
-                stateModel.setAwaitingCoordinatorACK(false);
+                stateModel.setAwaitingParentACK(false);
                 synchronized (stateModel.statsLock) {
-                    stateModel.stats.setGlobal(coordinatorMessage.getMeasurement());
+                    //TODO: non bellissimo che nei pacchetti ACK il dato si chiami in modo sbagliato
+                    stateModel.stats.setGlobal(parentMessage.getLocalmean());
                 }
                 break;
         }
@@ -185,25 +185,29 @@ public class EdgeNetworkWorkerThread extends Thread {
 
         TreeMessage treeMessage = gson.fromJson(msg, TreeMessage.class);
 
-        switch (treeMessage.getTreeNodeType()){
+        switch (treeMessage.getTreeMessageType()){
 
-            /*
-             * TODO: è possibile ricevere una demozione? Cioè passare da nodo interno a foglia?
-             * Dipende se voglio implementare il riconoscimento dell'abbandono dei nodi figli
-             */
             case LEAF:
-                //Si segna chi è il parent e fa partire la comunicazione con i sensori
+                System.out.println("DEBUG: EdgeNetworkWorkerThread - LEAF");
                 stateModel.setNetworkTreeParent(treeMessage.getParent());
-                stateModel.parent.startSensorsCommunication();
+                if(!stateModel.edgeNode.isCoordinator())
+                    stateModel.edgeNode.stopInternalNodeWork();
+                stateModel.setAwaitingParentACK(false);
+                stateModel.edgeNode.startSensorsCommunication();
                 break;
 
             case INTERNAL:
-                stateModel.parent.stopSensorsCommunication();
-                stateModel.parent.startInternalNodeWork();
+                System.out.println("DEBUG: EdgeNetworkWorkerThread - INTERNAL NODE");
+                //Il parent non cambia
+                stateModel.edgeNode.stopSensorsCommunication();
+                stateModel.edgeNode.startInternalNodeWork();
+                break;
+
+            case PARENT_DOWN:
+                System.out.println("DEBUG: EdgeNetworkWorkerThread - got PARENT_DOWN from: "+treeMessage.getSender().getNodeId());
+                stateModel.edgeNode.networkTreeNodeParentDown(treeMessage.getSender(),treeMessage.getParent());
                 break;
 
         }
-
     }
-
 }

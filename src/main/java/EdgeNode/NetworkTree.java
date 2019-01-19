@@ -33,9 +33,9 @@ public class NetworkTree{
     }
 
     /*
-     * Aggiunge un nodo all'albero con una visita BFS per mantenerlo meno profondo
-     * Lo aggiunge al primo nodo interno con un buco che trova o promuove una foglia
-     * Riferimento al padre. Se il padre ha un figlio solo è appena stato promosso a nodo interno
+     * Aggiunge un nodo all'albero con una visita BFS per mantenerlo meno profondo.
+     * Lo aggiunge al primo nodo interno con un buco che trova o promuove una foglia.
+     * Restituisce un riferimento al padre. Se il padre ha un figlio solo è appena stato promosso a nodo interno.
      */
     public NetworkTreeNode addNode(EdgeNodeRepresentation node){
 
@@ -58,6 +58,64 @@ public class NetworkTree{
                 queue.addAll(ntn.getChildren());
         }
         //Never get here
+        return null;
+    }
+
+
+    //TODO: metodo estremamente duplicato
+    /*
+     * Aggiunge un nodo all'albero con una visita BFS per mantenerlo meno profondo.
+     * Lo aggiunge al primo nodo interno con un buco che trova o promuove una foglia.
+     * Restituisce un riferimento al padre. Se il padre ha un figlio solo è appena stato promosso a nodo interno.
+     */
+    public NetworkTreeNode addNode(NetworkTreeNode node){
+
+        ArrayList<NetworkTreeNode> queue = new ArrayList<>();
+        queue.add(root);
+
+        while(!queue.isEmpty()){
+            NetworkTreeNode ntn = queue.remove(0);
+            //Trova un buco in un nodo interno
+            if(ntn.getChildren().size() > 0 && ntn.getChildren().size() < NetworkTreeNode.MAX_CHILDREN) {
+                ntn.addChildren(node);
+                return ntn;
+            }
+            //Promuove una foglia
+            else if(ntn.getChildren().size() == 0){
+                ntn.addChildren(node);
+                return ntn;
+            }
+            else
+                queue.addAll(ntn.getChildren());
+        }
+        //Never get here
+        return null;
+    }
+
+    /*
+     * Rimuove un nodo morto dall'albero. Tutti gli altri figli si aggiusteranno da soli mandando i PARENT_DOWN al coordinatore.
+     * Restituisce un riferimento al padre del nodo rimosso. Se il padre non ha più figli deve essere degradato a foglia.
+     */
+    public NetworkTreeNode removeNode(EdgeNodeRepresentation deadNode){
+        NetworkTreeNode deadTreeNode = findNode(root, deadNode);
+        //Se non ho trovato il nodo cercato è perchè l'ho già rimosso
+        if(deadTreeNode == null)
+            return null;
+        //Se trovo il nodo cercato lo rimuovo dalla lista del padre e ritorno il padre
+        else{
+            deadTreeNode.getParent().getChildren().remove(deadTreeNode);
+            return deadTreeNode.getParent();
+        }
+    }
+
+    //Visita DFS per trovare un nodo specifico
+    public NetworkTreeNode findNode(NetworkTreeNode ntn, EdgeNodeRepresentation node){
+        if(ntn.getEdgeNode().equals(node))
+            return ntn;
+        for(NetworkTreeNode child: ntn.getChildren()){
+            NetworkTreeNode found = findNode(child, node);
+            if(found != null) return found;
+        }
         return null;
     }
 
@@ -92,6 +150,11 @@ class NetworkTreeNode{
 
     public void addChildren(EdgeNodeRepresentation edgeNode){
         this.children.add(new NetworkTreeNode(edgeNode, this));
+    }
+
+    public void addChildren(NetworkTreeNode ntn){
+        this.children.add(ntn);
+        ntn.setParent(this);
     }
 
     public boolean isRoot(){
