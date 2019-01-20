@@ -75,12 +75,12 @@ public class EdgeNetworkWorkerThread extends Thread {
 
     //Quando mi arriva una HELLO_RESPONSE sono per forza una foglia
     private void handleHelloResponse(String msg){
+        System.out.println("DEBUG: EdgeNetworkWorkerThread - HelloResponse LEAF");
         HelloResponseMessage coordResponseMessage = gson.fromJson(msg, HelloResponseMessage.class);
         EdgeNodeRepresentation coord = coordResponseMessage.getCoordinator();
         //Si segna chi sono il edgeNode e il coordinatore e fa partire la comunicazione con i sensori
         stateModel.setNetworkTreeParent(coordResponseMessage.getParent());
         stateModel.setCoordinator(coord);
-        stateModel.edgeNode.startSensorsCommunication();
         synchronized (stateModel.helloSequenceLock) {
             stateModel.helloSequenceLock.notify();
         }
@@ -96,23 +96,29 @@ public class EdgeNetworkWorkerThread extends Thread {
 
             //Quando ricevo un pacchetto election rispondo con un ALIVE_ACK e faccio partire un'elezione, se non ce n'è già una in corso
             case ELECTION:
+                System.out.print("DEBUG: EdgeNetworkWorkerThread - got ELECTION from: "+sender.getNodeId());
                 String response = gson.toJson(new ElectionMesssage(ElectionMesssage.ElectionMessageType.ALIVE_ACK, stateModel.edgeNode.getRepresentation()));
                 stateModel.edgeNetworkSocket.write(new DatagramPacket(response.getBytes(), response.length(), new InetSocketAddress(sender.getIpAddr(), sender.getNodesPort())));
                 //Controlla che il pacchetto election non sia vecchio
                 if(electionMesssage.getTimestamp() <= stateModel.getLastElectionTimestamp()){
+                    System.out.println(" but packet is old, discard it");
                     break;
                 }
                 synchronized (stateModel.electionStatusLock) {
-                    if (stateModel.electionStatus != StateModel.ElectionStatus.FINISHED)
+                    if (stateModel.electionStatus != StateModel.ElectionStatus.FINISHED) {
+                        System.out.println(" but an election is already on");
                         break;
+                    }
                     stateModel.electionStatus = StateModel.ElectionStatus.STARTED;
                 }
+                System.out.println(", starting election!");
                 //Gestione della helloSequence
                 synchronized (stateModel.helloSequenceLock) {
                     stateModel.helloSequenceLock.notify();
                 }
                 stateModel.setAwaitingParentACK(false);
                 stateModel.setNetworkTreeParent(null);
+                stateModel.nodes.remove(stateModel.getCoordinator());
                 stateModel.setCoordinator(null);
                 new Thread(new Runnable() {
                     @Override
@@ -124,6 +130,7 @@ public class EdgeNetworkWorkerThread extends Thread {
 
             //Quando ricevo un pacchetto ACK, mi metto in stato TAKEN_CARE, se non lo ero già.
             case ALIVE_ACK:
+                System.out.print("DEBUG: EdgeNetworkWorkerThread - got ALIVE_ACK from: "+sender.getNodeId());
                 synchronized (stateModel.electionStatusLock) {
                     if (stateModel.electionStatus != StateModel.ElectionStatus.STARTED)
                         break;
@@ -136,6 +143,7 @@ public class EdgeNetworkWorkerThread extends Thread {
 
             //Quando ricevo un pacchetto VICTORY posso assumere che sia finita un'elezione e mi segno il nuovo coordinatore.
             case VICTORY:
+                System.out.print("DEBUG: EdgeNetworkWorkerThread - got VICTORY from: "+sender.getNodeId());
                 //Controlla che il pacchetto victory non sia vecchio
                 if(electionMesssage.getTimestamp() <= stateModel.getLastElectionTimestamp()){
                     break;
@@ -143,9 +151,6 @@ public class EdgeNetworkWorkerThread extends Thread {
                 synchronized (stateModel.electionStatusLock){
                     stateModel.electionStatus = StateModel.ElectionStatus.FINISHED;
                 }
-                stateModel.setAwaitingParentACK(false);
-                //Setto il parent a null perchè appena il nuovo coordinatore ha ricostruito l'albero mi manderà un pacchetto TREE
-                stateModel.setNetworkTreeParent(null);
                 stateModel.setCoordinator(sender);
                 stateModel.setLastElectionTimestamp(electionMesssage.getTimestamp());
                 synchronized (stateModel.electionLock){
@@ -167,15 +172,14 @@ public class EdgeNetworkWorkerThread extends Thread {
         switch (parentMessage.getParentMessageType()){
 
             case STATS_UPDATE:
-                if (stateModel.edgeNode.isCoordinator())
+                if (stateModel.isInternalNode)
                     stateModel.internalNodeBuffer.put(parentMessage);
                 break;
 
             case ACK:
                 stateModel.setAwaitingParentACK(false);
                 synchronized (stateModel.statsLock) {
-                    //TODO: non bellissimo che nei pacchetti ACK il dato si chiami in modo sbagliato
-                    stateModel.stats.setGlobal(parentMessage.getLocalmean());
+                    stateModel.stats.setGlobal(parentMessage.getMeasurement());
                 }
                 break;
         }
@@ -189,25 +193,32 @@ public class EdgeNetworkWorkerThread extends Thread {
 
             case LEAF:
                 System.out.println("DEBUG: EdgeNetworkWorkerThread - LEAF");
-                stateModel.setNetworkTreeParent(treeMessage.getParent());
-                if(!stateModel.edgeNode.isCoordinator())
-                    stateModel.edgeNode.stopInternalNodeWork();
                 stateModel.setAwaitingParentACK(false);
-                stateModel.edgeNode.startSensorsCommunication();
+                stateModel.setNetworkTreeParent(treeMessage.getParent());
+                stateModel.edgeNode.stopInternalNodeWork();
                 break;
 
             case INTERNAL:
                 System.out.println("DEBUG: EdgeNetworkWorkerThread - INTERNAL NODE");
-                //Il parent non cambia
-                stateModel.edgeNode.stopSensorsCommunication();
+                // Se mi viene specificato un parent si tratta di un messaggio
+                // dal nuovo coordinatore che ha creato il nuovo albero
+                if(treeMessage.getParent() != null) {
+                    stateModel.setNetworkTreeParent(treeMessage.getParent());
+                    stateModel.setAwaitingParentACK(false);
+                }
                 stateModel.edgeNode.startInternalNodeWork();
                 break;
 
             case PARENT_DOWN:
                 System.out.println("DEBUG: EdgeNetworkWorkerThread - got PARENT_DOWN from: "+treeMessage.getSender().getNodeId());
-                stateModel.edgeNode.networkTreeNodeParentDown(treeMessage.getSender(),treeMessage.getParent());
+                stateModel.edgeNode.networkTreeNodeParentDown(treeMessage.getSender());
                 break;
 
+            case PARENT_UPDATE:
+                System.out.println("DEBUG: EdgeNetworkWorkerThread - PARENT UPDATE");
+                stateModel.setAwaitingParentACK(false);
+                stateModel.setNetworkTreeParent(treeMessage.getParent());
+                break;
         }
     }
 }

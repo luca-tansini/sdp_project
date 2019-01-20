@@ -13,23 +13,23 @@ public class ParentMessage extends EdgeNetworkMessage {
 
     private ParentMessageType parentMessageType;
     private EdgeNodeRepresentation sender;
-    private Measurement localmean;
+    private Measurement measurement;
     private HashMap<String,Measurement> local;
 
     public ParentMessage(){}
 
-    public ParentMessage(ParentMessageType parentMessageType, EdgeNodeRepresentation sender, Measurement localmean) {
-        this.setType(MessageType.PARENT);
+    public ParentMessage(ParentMessageType parentMessageType, EdgeNodeRepresentation sender, Measurement measurement) {
+        super.setType(MessageType.PARENT);
         this.parentMessageType = parentMessageType;
         this.sender = sender;
-        this.localmean = localmean;
+        this.measurement = measurement;
     }
 
-    public ParentMessage(ParentMessageType parentMessageType, EdgeNodeRepresentation sender, Measurement localmean, HashMap<String,Measurement> local) {
-        this.setType(MessageType.PARENT);
+    public ParentMessage(ParentMessageType parentMessageType, EdgeNodeRepresentation sender, Measurement measurement, HashMap<String,Measurement> local) {
+        super.setType(MessageType.PARENT);
         this.parentMessageType = parentMessageType;
         this.sender = sender;
-        this.localmean = localmean;
+        this.measurement = measurement;
         this.local = local;
     }
 
@@ -49,12 +49,12 @@ public class ParentMessage extends EdgeNetworkMessage {
         this.sender = sender;
     }
 
-    public Measurement getLocalmean() {
-        return localmean;
+    public Measurement getMeasurement() {
+        return measurement;
     }
 
-    public void setLocalmean(Measurement localmean) {
-        this.localmean = localmean;
+    public void setMeasurement(Measurement measurement) {
+        this.measurement = measurement;
     }
 
     public HashMap<String, Measurement> getLocal() {

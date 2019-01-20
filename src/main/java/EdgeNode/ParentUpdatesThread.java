@@ -15,7 +15,7 @@ import static EdgeNode.StateModel.ElectionStatus.FINISHED;
 import static EdgeNode.StateModel.ElectionStatus.STARTED;
 
 /*
- * ParentUpdatesThread definisce il comportamento dei nodi foglia che comunicano con i sensori.
+ * ParentUpdatesThread definisce la comunicazione con i sensori.
  * Si tratta di un thread che:
  *      - legge le misurazioni dei sensori
  *      - ogni 40 misurazioni lette (con sliding windows overlap 50%) fa la media e le invia al parent
@@ -23,13 +23,17 @@ import static EdgeNode.StateModel.ElectionStatus.STARTED;
  *      - se il parent era anche il coordinatore fa partire delle elezioni
  *      - mentre attende l'aggiornamento del parent può continuare a consumare le misurazioni dei sensori
  *        e tiene la media più recente in cache per inviarla nonappena sia disponibile un parent
+ *
+ * Se il nodo è un nodo interno non invia direttamente le misurazioni al parent,
+ * è sufficiente metterle in stats.local, sarà poi l'InternalNodeThread a processarle e inviarle al parent
+ *
  */
 public class ParentUpdatesThread extends Thread {
 
     private StateModel stateModel;
     private ArrayList<Measurement> buffer= new ArrayList();
     private Gson gson = new Gson();
-    private Measurement cached;
+    private String cached;
 
     public ParentUpdatesThread(){
         this.stateModel = StateModel.getInstance();
@@ -41,12 +45,16 @@ public class ParentUpdatesThread extends Thread {
         while (stateModel.sensorCommunicationOnline){
 
             EdgeNodeRepresentation parent = stateModel.getNetworkTreeParent();
-            //Se il mio parent è null vuol dire che sono sia radice che foglia (unico nodo) e mi mando gli update da solo
-            if(parent == null && stateModel.edgeNode.isCoordinator())
-                parent = stateModel.edgeNode.getRepresentation();
 
+            if(stateModel.isInternalNode && cached != null) {
+                synchronized (stateModel.statsLock){
+                    ParentMessage msg = gson.fromJson(cached, ParentMessage.class);
+                    stateModel.partialMean.put(msg.getMeasurement().getId(),msg.getMeasurement());
+                }
+                cached = null;
+            }
             if(parent != null && cached != null) {
-                Measurement tmp = cached;
+                String tmp = cached;
                 cached = null;
                 sendMeasurement(parent, tmp);
             }
@@ -61,17 +69,26 @@ public class ParentUpdatesThread extends Thread {
                     mean += m.getValue();
                 Measurement measurement = new Measurement(stateModel.edgeNode.getNodeId()+"", "local", mean/40, Instant.now().toEpochMilli());
 
-                if(parent != null) {
-                    sendMeasurement(parent, measurement);
-                }
-                else{
-                    //Non ha senso avere più di un valore cachato
-                    this.cached = measurement;
+
+                // Aggiorna nel model la statistica locale
+                synchronized (stateModel.statsLock){
+                    stateModel.stats.getLocal().put(measurement.getId(),measurement);
+                    // Se sono un nodo interno metto la media locale in partialMean
+                    // così verrà usata da InternalNodeThread per calcolare la media successiva
+                    if(stateModel.isInternalNode)
+                        stateModel.partialMean.put(measurement.getId(), measurement);
                 }
 
-                //Aggiorna nel model la statistica locale
-                synchronized (stateModel.statsLock){
-                    stateModel.localMean = measurement;
+                // Se non sono un nodo interno mando le statistiche al parent via rete
+                if(!stateModel.isInternalNode){
+                    ParentMessage msg = new ParentMessage(ParentMessage.ParentMessageType.STATS_UPDATE, stateModel.edgeNode.getRepresentation(), measurement, stateModel.stats.getLocal());
+                    String json = gson.toJson(msg);
+                    if (parent != null) {
+                        sendMeasurement(parent, json);
+                    } else {
+                        //Non ha senso avere più di un valore cachato
+                        this.cached = json;
+                    }
                 }
 
                 //Sliding window, 50% overlap
@@ -82,9 +99,7 @@ public class ParentUpdatesThread extends Thread {
         }
     }
 
-    private void sendMeasurement(EdgeNodeRepresentation parent, Measurement measurement){
-        ParentMessage msg = new ParentMessage(ParentMessage.ParentMessageType.STATS_UPDATE, stateModel.edgeNode.getRepresentation(), measurement);
-        String json = gson.toJson(msg);
+    private void sendMeasurement(EdgeNodeRepresentation parent, String json){
         stateModel.edgeNetworkSocket.write(new DatagramPacket(json.getBytes(), json.length(), new InetSocketAddress(parent.getIpAddr(), parent.getNodesPort())));
         synchronized (stateModel.parentACKLock){
             stateModel.setAwaitingParentACK(true);
@@ -93,7 +108,8 @@ public class ParentUpdatesThread extends Thread {
         if(stateModel.isAwaitingParentACK() && stateModel.sensorCommunicationOnline){
             System.out.println("DEBUG: ParentUpdatesThread - Il parent è morto!");
             stateModel.setNetworkTreeParent(null);
-            cached = measurement;
+            stateModel.nodes.remove(parent);
+            cached = json;
 
             //Se il mio parent era anche il coordinatore fccio partire elezioni
             if(parent.equals(stateModel.getCoordinator())){

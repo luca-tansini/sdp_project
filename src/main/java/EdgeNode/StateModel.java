@@ -139,9 +139,9 @@ public class StateModel {
 
 
     //Gestione delle statistiche
-    public Statistics stats;                                    //dentro a stats.local ci sono tutte le misurazioni dei figli dei figli
-    public HashMap<String,Measurement> childLocalMeans;         //dentro a childLocalMeans ci sono le misurazioni dei figli diretti
-    public Measurement localMean;                               //dentro a localMean c'è la media locale
+    public Statistics stats;
     public final Object statsLock = new Object();
+    //Dentro a partialMean ci sono le statistiche da aggregare (la mia media e le medie che arrivano dai figli)
+    public HashMap<String, Measurement> partialMean;
 
 }

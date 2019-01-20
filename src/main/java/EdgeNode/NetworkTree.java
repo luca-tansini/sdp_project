@@ -1,6 +1,7 @@
 package EdgeNode;
 
 import ServerCloud.Model.EdgeNodeRepresentation;
+import sun.nio.ch.Net;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -8,28 +9,15 @@ import java.util.Iterator;
 public class NetworkTree{
 
     private NetworkTreeNode root;
+    private ArrayList<NetworkTreeNode> orphans;
 
     public NetworkTree(EdgeNodeRepresentation node){
         this.root = new NetworkTreeNode(node, null);
+        this.orphans = new ArrayList<>();
     }
 
     public NetworkTreeNode getRoot() {
         return root;
-    }
-
-    public ArrayList<EdgeNodeRepresentation> getLeaves(){
-        ArrayList<EdgeNodeRepresentation> leaves = new ArrayList();
-        getLeaves(root, leaves);
-        return leaves;
-    }
-
-    //Visita DFS per trovare tutte le foglie
-    public void getLeaves(NetworkTreeNode ntn, ArrayList<EdgeNodeRepresentation> leaves){
-        if(ntn.isLeaf())
-            leaves.add(ntn.getEdgeNode());
-        else
-            for(NetworkTreeNode child: ntn.getChildren())
-                getLeaves(child, leaves);
     }
 
     /*
@@ -75,13 +63,8 @@ public class NetworkTree{
 
         while(!queue.isEmpty()){
             NetworkTreeNode ntn = queue.remove(0);
-            //Trova un buco in un nodo interno
-            if(ntn.getChildren().size() > 0 && ntn.getChildren().size() < NetworkTreeNode.MAX_CHILDREN) {
-                ntn.addChildren(node);
-                return ntn;
-            }
-            //Promuove una foglia
-            else if(ntn.getChildren().size() == 0){
+            //Trova un buco in un nodo interno o promuove una foglia
+            if(ntn.getChildren().size() < NetworkTreeNode.MAX_CHILDREN) {
                 ntn.addChildren(node);
                 return ntn;
             }
@@ -98,14 +81,35 @@ public class NetworkTree{
      */
     public NetworkTreeNode removeNode(EdgeNodeRepresentation deadNode){
         NetworkTreeNode deadTreeNode = findNode(root, deadNode);
-        //Se non ho trovato il nodo cercato è perchè l'ho già rimosso
+        // Se non ho trovato il nodo cercato è perchè l'ho già rimosso
         if(deadTreeNode == null)
             return null;
-        //Se trovo il nodo cercato lo rimuovo dalla lista del padre e ritorno il padre
-        else{
-            deadTreeNode.getParent().getChildren().remove(deadTreeNode);
-            return deadTreeNode.getParent();
+        // Se trovo il nodo cercato lo rimuovo dalla lista del padre
+        // Aggiungo gli eventuali figli agli orfani (togliendogli il riferimento al padre)
+        // E infine ritorno il padre
+        deadTreeNode.getParent().getChildren().remove(deadTreeNode);
+        for(NetworkTreeNode newOrphan: deadTreeNode.getChildren()){
+            newOrphan.setParent(null);
+            orphans.add(newOrphan);
         }
+        return deadTreeNode.getParent();
+    }
+
+    public NetworkTreeNode findNode(EdgeNodeRepresentation node){
+        // Quando cerca un nodo per prima cosa lo cerca negli orfani e se lo trova lo rimuove
+        for(int i=0; i<orphans.size(); i++) {
+            // Cerca negli orfani con DFS (gli orfani sono alberi a tutti gli effetti)
+            NetworkTreeNode found = findNode(orphans.get(i),node);
+            if(found != null){
+                // Se il padre è nullo  ho un orfano di primo livello
+                // quindi deve toglierlo dagli orfani (altrimenti ci pensa il chiamante)
+                if(found.getParent() == null)
+                    orphans.remove(i);
+                return found;
+            }
+        }
+        // Se non lo trova negli orfani visita l'albero
+        return findNode(root, node);
     }
 
     //Visita DFS per trovare un nodo specifico
@@ -132,6 +136,23 @@ public class NetworkTree{
             toList(child, list);
     }
 
+    public void printTree(){
+        System.out.println("Tree:");
+        printTree(root, 1);
+        System.out.println("\nOrphans:");
+        for (NetworkTreeNode ntn: orphans)
+            printTree(ntn, 1);
+    }
+
+    public void printTree(NetworkTreeNode ntn, int lvl){
+        for(int i=0; i<lvl; i++)
+            System.out.print("\t");
+        System.out.println(ntn);
+        for(NetworkTreeNode child: ntn.getChildren())
+            printTree(child, lvl+1);
+    }
+
+
 }
 
 class NetworkTreeNode{
@@ -153,6 +174,7 @@ class NetworkTreeNode{
     }
 
     public void addChildren(NetworkTreeNode ntn){
+        System.out.println("DEBUG - Trying to add NTN"+ntn.edgeNode.getNodeId()+" as children to NTN"+this.edgeNode.getNodeId());
         this.children.add(ntn);
         ntn.setParent(this);
     }
@@ -188,4 +210,16 @@ class NetworkTreeNode{
     public void setChildren(ArrayList<NetworkTreeNode> children) {
         this.children = children;
     }
+
+    @Override
+    public String toString(){
+        String out =  "NTN-[EdgeNode: "+edgeNode.getNodeId()+" parent: ";
+        out += parent == null ? null : parent.edgeNode.getNodeId();
+        out += " children:(";
+        for(NetworkTreeNode child: children)
+            out += child.edgeNode.getNodeId() + ",";
+        out+=")]";
+        return out;
+    }
+
 }

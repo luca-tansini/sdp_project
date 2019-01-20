@@ -39,17 +39,16 @@ public class InternalNodeThread extends Thread{
 
     public void run(){
 
-        System.out.println("Starting internal node work!");
-
         Object childLock = new Object();
 
-        //Fa partire thread di timeout che scrive al parent
+        // Fa partire thread di timeout che scrive al parent
         new Thread(new Runnable() {
             @Override
             public void run() {
 
-                //HashMap in cui metto i timestamp delle statistiche più recenti già usate
-                HashMap<String,Long> sentTimestamps = new HashMap<>();
+                // HashMap in cui metto i timestamp delle statistiche più recenti già usate
+                HashMap<String,Long> sentLocalTimestamps = new HashMap<>();
+                HashMap<String,Long> sentPartialMeanTimestamps = new HashMap<>();
 
                 while(true){
                     synchronized (childLock){
@@ -63,7 +62,7 @@ public class InternalNodeThread extends Thread{
 
                     EdgeNodeRepresentation parent = stateModel.getNetworkTreeParent();
 
-                    //Manda i pacchetti arretrati
+                    // Manda i pacchetti arretrati
                     if(cached != null && parent != null){
                         String tmp = cached;
                         cached = null;
@@ -71,45 +70,47 @@ public class InternalNodeThread extends Thread{
                     }
 
                     HashMap<String, Measurement> statsLocal = new HashMap<>();
+                    Measurement partialMean = null;
 
                     synchronized(stateModel.statsLock) {
-                        //Calcola media con tutte le childLocalMeans più recenti
+                        // Calcola media con tutte le PartialMean più recenti
                         double mean = 0;
                         int count = 0;
-                        for(String id : stateModel.childLocalMeans.keySet()) {
-                            Measurement m = stateModel.childLocalMeans.get(id);
-                            Long timestamp = sentTimestamps.get(id);
+                        for(String id : stateModel.partialMean.keySet()) {
+                            Measurement m = stateModel.partialMean.get(id);
+                            Long timestamp = sentPartialMeanTimestamps.get(id);
                             if(timestamp == null || timestamp < m.getTimestamp()){
                                 mean += m.getValue();
                                 count++;
-                                statsLocal.put(id, m);
-                                sentTimestamps.put(id,m.getTimestamp());
+                                sentPartialMeanTimestamps.put(id,m.getTimestamp());
                             }
                         }
                         if(count != 0) {
                             mean /= count;
-                            stateModel.localMean = new Measurement(""+stateModel.edgeNode.getNodeId(), "localMean", mean, Instant.now().toEpochMilli());
+                            partialMean = new Measurement(""+stateModel.edgeNode.getNodeId(), "partialMean", mean, Instant.now().toEpochMilli());
                         }
-                        //Aggiunge a statsLocal tutte le misurazioni dei figli dei figli più recenti (per farle arrivare al server)
+                        // Aggiunge a statsLocal tutte le misurazioni locali più recenti (per farle arrivare al server)
                         for(String id : stateModel.stats.getLocal().keySet()) {
                             Measurement m = stateModel.stats.getLocal().get(id);
-                            Long timestamp = sentTimestamps.get(id);
+                            Long timestamp = sentLocalTimestamps.get(id);
                             if(timestamp == null || timestamp < m.getTimestamp()){
                                 statsLocal.put(id, m);
-                                sentTimestamps.put(id,m.getTimestamp());
+                                sentLocalTimestamps.put(id,m.getTimestamp());
                             }
                         }
                     }
 
-                    //Invia gli update al parent (solo se ha calcolato qualcosa di nuovo)
+                    //Invia gli update al parent (solo se ha qualcosa di nuovo) (se ho delle nuove statsLocal ho di sicuro ricalcolato la media)
                     if(statsLocal.size() > 0) {
+
+                        if(partialMean == null) System.out.println("DEBUG: InternalNodeThread - Mi sbagliavo, partialMean poteva essere null");
+
+
+                        ParentMessage parentMessage = new ParentMessage(ParentMessage.ParentMessageType.STATS_UPDATE, stateModel.edgeNode.getRepresentation(), partialMean, statsLocal);
+                        String json = gson.toJson(parentMessage);
 
                         //Aggiorna il riferimento al parent per sicurezza
                         parent = stateModel.getNetworkTreeParent();
-
-                        ParentMessage parentMessage = new ParentMessage(ParentMessage.ParentMessageType.STATS_UPDATE, stateModel.edgeNode.getRepresentation(), stateModel.localMean, statsLocal);
-                        String json = gson.toJson(parentMessage);
-
                         if(parent != null)
                             sendMeasurement(parent, json);
                         else
@@ -134,10 +135,12 @@ public class InternalNodeThread extends Thread{
             String json = gson.toJson(response, ParentMessage.class);
             stateModel.edgeNetworkSocket.write(new DatagramPacket(json.getBytes(), json.length(), new InetSocketAddress(msg.getSender().getIpAddr(), msg.getSender().getNodesPort())));
 
-            //Aggiunge alle statistiche locali i dati del nodo child per essere processati
+            // Aggiunge a partialMean la misurazione del nodo child
+            // E a local i dati locali dei singoli nodi da inoltrare
             synchronized (stateModel.statsLock) {
-                stateModel.childLocalMeans.put(msg.getLocalmean().getId(),msg.getLocalmean());
-                stateModel.stats.getLocal().putAll(msg.getLocal());
+                stateModel.partialMean.put(msg.getMeasurement().getId(),msg.getMeasurement());
+                if(msg.getLocal() != null)
+                    stateModel.stats.getLocal().putAll(msg.getLocal());
             }
         }
     }
@@ -151,13 +154,14 @@ public class InternalNodeThread extends Thread{
         }
         if(stateModel.isAwaitingParentACK() && stateModel.sensorCommunicationOnline){
             System.out.println("DEBUG: InternalNodeThread - Il parent è morto!");
+            stateModel.setAwaitingParentACK(false);
             stateModel.setNetworkTreeParent(null);
+            stateModel.nodes.remove(parent);
             cached = json;
 
             //Se il mio parent era anche il coordinatore faccio partire elezioni
-            if(stateModel.getNetworkTreeParent().equals(stateModel.getCoordinator())){
+            if(parent.equals(stateModel.getCoordinator())){
                 stateModel.setCoordinator(null);
-                stateModel.setAwaitingParentACK(false);
                 synchronized (stateModel.electionStatusLock){
                     if(stateModel.electionStatus != FINISHED)
                         return;

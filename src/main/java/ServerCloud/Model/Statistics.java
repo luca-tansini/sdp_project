@@ -5,21 +5,11 @@ import java.util.HashMap;
 
 public class Statistics {
 
-    //TODO: usare localmean
-    private Measurement global;
-    private Measurement localMean;
-    private HashMap<String, Measurement> local;
+    private Measurement global;                         //Dentro a global c'è la statistica che arriva dal coordinatore
+    private HashMap<String, Measurement> local;         //Dentro a local ci sono tutte le statistiche locali dei nodi inferiori
 
     public Statistics(){
         this.local = new HashMap<>();
-    }
-
-    public Measurement getLocalMean() {
-        return localMean;
-    }
-
-    public void setLocalMean(Measurement localMean) {
-        this.localMean = localMean;
     }
 
     public Measurement getGlobal() {
@@ -48,7 +38,7 @@ public class Statistics {
             out +="\n";
         out += "    Local:\n";
         for(String id: local.keySet()){
-            out += "        "+id+": "+local.get(id)+"\n";
+            out += "        "+id+": "+ local.get(id)+"\n";
         }
         return out;
     }
