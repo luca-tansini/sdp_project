@@ -16,17 +16,19 @@ public class ParentMessage extends EdgeNetworkMessage {
     private Measurement measurement;
     private HashMap<String,Measurement> local;
 
-    public ParentMessage(){}
+    public ParentMessage(){
+        super(MessageType.PARENT);
+    }
 
     public ParentMessage(ParentMessageType parentMessageType, EdgeNodeRepresentation sender, Measurement measurement) {
-        super.setType(MessageType.PARENT);
+        super(MessageType.PARENT);
         this.parentMessageType = parentMessageType;
         this.sender = sender;
         this.measurement = measurement;
     }
 
     public ParentMessage(ParentMessageType parentMessageType, EdgeNodeRepresentation sender, Measurement measurement, HashMap<String,Measurement> local) {
-        super.setType(MessageType.PARENT);
+        super(MessageType.PARENT);
         this.parentMessageType = parentMessageType;
         this.sender = sender;
         this.measurement = measurement;

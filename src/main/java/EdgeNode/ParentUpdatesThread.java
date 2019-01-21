@@ -54,6 +54,9 @@ public class ParentUpdatesThread extends Thread {
                 cached = null;
             }
             if(parent != null && cached != null) {
+                // Aspetta un secondo a mandare il pacchetto cachato per dare tempo al parent
+                // di far partire l'InternalNodeThread nel caso sia stato appena promosso
+                try{Thread.sleep(1000);} catch (InterruptedException e){e.printStackTrace();}
                 String tmp = cached;
                 cached = null;
                 sendMeasurement(parent, tmp);
@@ -99,6 +102,7 @@ public class ParentUpdatesThread extends Thread {
         }
     }
 
+
     private void sendMeasurement(EdgeNodeRepresentation parent, String json){
         stateModel.edgeNetworkSocket.write(new DatagramPacket(json.getBytes(), json.length(), new InetSocketAddress(parent.getIpAddr(), parent.getNodesPort())));
         synchronized (stateModel.parentACKLock){
@@ -108,13 +112,13 @@ public class ParentUpdatesThread extends Thread {
         if(stateModel.isAwaitingParentACK() && stateModel.sensorCommunicationOnline){
             System.out.println("DEBUG: ParentUpdatesThread - Il parent è morto!");
             stateModel.setNetworkTreeParent(null);
+            stateModel.setAwaitingParentACK(false);
             stateModel.nodes.remove(parent);
             cached = json;
 
             //Se il mio parent era anche il coordinatore fccio partire elezioni
             if(parent.equals(stateModel.getCoordinator())){
                 stateModel.setCoordinator(null);
-                stateModel.setAwaitingParentACK(false);
                 synchronized (stateModel.electionStatusLock){
                     if(stateModel.electionStatus != FINISHED)
                         return;
@@ -127,6 +131,27 @@ public class ParentUpdatesThread extends Thread {
             else{
                 String parentDownJson = gson.toJson(new TreeMessage(TreeMessage.TreeMessageType.PARENT_DOWN, parent, stateModel.edgeNode.getRepresentation()));
                 stateModel.edgeNetworkSocket.write(new DatagramPacket(parentDownJson.getBytes(), parentDownJson.length(), new InetSocketAddress(stateModel.getCoordinator().getIpAddr(), stateModel.getCoordinator().getNodesPort())));
+                // Devo controllare che anche il coordinatore non sia morto, perchè
+                // nel caso in cui mio padre sia morto subito prima del coordinatore potrei finire in deadlock
+                synchronized (stateModel.coordinatorACKLock) {
+                    stateModel.setAwaitingCoordinatorACK(true);
+                    try {
+                        stateModel.coordinatorACKLock.wait(5000);
+                    } catch (InterruptedException e) {e.printStackTrace();}
+                }
+                if(stateModel.isAwaitingCoordinatorACK()){
+                    System.out.print("DEBUG: ParentUpdatesThread - Anche il coordinatore è morto");
+                    stateModel.setCoordinator(null);
+                    synchronized (stateModel.electionStatusLock){
+                        if(stateModel.electionStatus != FINISHED) {
+                            System.out.println(", ma ho già delle elezioni in corso");
+                            return;
+                        }
+                        stateModel.electionStatus = STARTED;
+                    }
+                    System.out.println(", faccio partire elezioni");
+                    stateModel.edgeNode.bullyElection();
+                }
             }
         }
     }

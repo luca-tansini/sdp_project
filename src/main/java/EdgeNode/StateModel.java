@@ -23,10 +23,8 @@ public class StateModel {
         stats = new Statistics();
     }
 
-    //Riferimento all'Edgenode e flag di shutdown
+    //Riferimento all'Edgenode
     public EdgeNode edgeNode;
-
-    public volatile boolean shutdown;
 
 
     //Lista dei nodi edge noti
@@ -107,10 +105,10 @@ public class StateModel {
     //Gestione del comportamento da nodo interno
     public InternalNodeThread internalNodeThread;
     public SharedBuffer<ParentMessage> internalNodeBuffer;
-    public boolean isInternalNode = false;
+    public volatile boolean isInternalNode = false;
 
 
-    //Gestione del thread che manda update al parent
+    //Gestione dei thread che mandano update al parent
     public ParentUpdatesThread parentUpdatesThread;
 
     private boolean awaitingParentACK;
@@ -127,6 +125,23 @@ public class StateModel {
             this.awaitingParentACK = awaitingParentACK;
             if(awaitingParentACK == false)
                 parentACKLock.notify();
+        }
+    }
+
+    private boolean awaitingCoordinatorACK;
+    public final Object coordinatorACKLock = new Object();
+
+    public boolean isAwaitingCoordinatorACK() {
+        synchronized (coordinatorACKLock) {
+            return awaitingCoordinatorACK;
+        }
+    }
+
+    public void setAwaitingCoordinatorACK(boolean awaitingCordinatorACK) {
+        synchronized (coordinatorACKLock) {
+            this.awaitingCoordinatorACK = awaitingCordinatorACK;
+            if(awaitingCordinatorACK == false)
+                coordinatorACKLock.notify();
         }
     }
 

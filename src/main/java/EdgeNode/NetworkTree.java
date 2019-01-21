@@ -49,8 +49,6 @@ public class NetworkTree{
         return null;
     }
 
-
-    //TODO: metodo estremamente duplicato
     /*
      * Aggiunge un nodo all'albero con una visita BFS per mantenerlo meno profondo.
      * Lo aggiunge al primo nodo interno con un buco che trova o promuove una foglia.
@@ -79,20 +77,15 @@ public class NetworkTree{
      * Rimuove un nodo morto dall'albero. Tutti gli altri figli si aggiusteranno da soli mandando i PARENT_DOWN al coordinatore.
      * Restituisce un riferimento al padre del nodo rimosso. Se il padre non ha più figli deve essere degradato a foglia.
      */
-    public NetworkTreeNode removeNode(EdgeNodeRepresentation deadNode){
-        NetworkTreeNode deadTreeNode = findNode(root, deadNode);
-        // Se non ho trovato il nodo cercato è perchè l'ho già rimosso
-        if(deadTreeNode == null)
-            return null;
-        // Se trovo il nodo cercato lo rimuovo dalla lista del padre
+    public void removeNode(NetworkTreeNode deadTreeNode){
+        // Rimuovo il nodo cercato dalla lista del padre
         // Aggiungo gli eventuali figli agli orfani (togliendogli il riferimento al padre)
-        // E infine ritorno il padre
-        deadTreeNode.getParent().getChildren().remove(deadTreeNode);
+        if(deadTreeNode.getParent() != null)
+            deadTreeNode.getParent().getChildren().remove(deadTreeNode);
         for(NetworkTreeNode newOrphan: deadTreeNode.getChildren()){
             newOrphan.setParent(null);
             orphans.add(newOrphan);
         }
-        return deadTreeNode.getParent();
     }
 
     public NetworkTreeNode findNode(EdgeNodeRepresentation node){
@@ -139,7 +132,7 @@ public class NetworkTree{
     public void printTree(){
         System.out.println("Tree:");
         printTree(root, 1);
-        System.out.println("\nOrphans:");
+        System.out.println("Orphans:");
         for (NetworkTreeNode ntn: orphans)
             printTree(ntn, 1);
     }
@@ -157,7 +150,7 @@ public class NetworkTree{
 
 class NetworkTreeNode{
 
-    public static final int MAX_CHILDREN = 3;
+    public static final int MAX_CHILDREN = 2;
 
     private EdgeNodeRepresentation edgeNode;
     private NetworkTreeNode parent;
@@ -174,7 +167,6 @@ class NetworkTreeNode{
     }
 
     public void addChildren(NetworkTreeNode ntn){
-        System.out.println("DEBUG - Trying to add NTN"+ntn.edgeNode.getNodeId()+" as children to NTN"+this.edgeNode.getNodeId());
         this.children.add(ntn);
         ntn.setParent(this);
     }

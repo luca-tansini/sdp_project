@@ -5,7 +5,7 @@ import ServerCloud.Model.EdgeNodeRepresentation;
 public class TreeMessage extends EdgeNetworkMessage{
 
     public enum TreeMessageType {
-        LEAF,INTERNAL,PARENT_DOWN, PARENT_UPDATE
+        LEAF, INTERNAL, PARENT_DOWN, PARENT_UPDATE
     }
 
     private TreeMessageType treeMessageType;
@@ -13,13 +13,13 @@ public class TreeMessage extends EdgeNetworkMessage{
     private EdgeNodeRepresentation sender;
 
     public TreeMessage(TreeMessageType treeMessageType, EdgeNodeRepresentation parent){
-        this.setType(MessageType.TREE);
+        super(MessageType.TREE);
         this.treeMessageType = treeMessageType;
         this.parent = parent;
     }
 
     public TreeMessage(TreeMessageType treeMessageType, EdgeNodeRepresentation parent, EdgeNodeRepresentation sender){
-        this.setType(MessageType.TREE);
+        super(MessageType.TREE);
         this.treeMessageType = treeMessageType;
         this.parent = parent;
         this.sender = sender;

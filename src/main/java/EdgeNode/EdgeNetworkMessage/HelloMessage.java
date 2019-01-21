@@ -6,10 +6,11 @@ public class HelloMessage extends EdgeNetworkMessage {
     private EdgeNodeRepresentation requestingNode;
 
     public HelloMessage() {
+        super(MessageType.HELLO);
     }
 
     public HelloMessage(EdgeNodeRepresentation requestingNode){
-        this.setType(MessageType.HELLO);
+        super(MessageType.HELLO);
         this.requestingNode = requestingNode;
     }
 

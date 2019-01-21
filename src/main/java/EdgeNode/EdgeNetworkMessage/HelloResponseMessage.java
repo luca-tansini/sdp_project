@@ -5,16 +5,15 @@ import ServerCloud.Model.EdgeNodeRepresentation;
 public class HelloResponseMessage extends EdgeNetworkMessage {
 
     private EdgeNodeRepresentation coordinator;
-    private long timestamp;
     private EdgeNodeRepresentation parent;
 
     public HelloResponseMessage() {
+        super(MessageType.HELLO_RESPONSE);
     }
 
     public HelloResponseMessage(EdgeNodeRepresentation coordinator, long timestamp, EdgeNodeRepresentation parent){
-        this.setType(MessageType.HELLO_RESPONSE);
+        super(MessageType.HELLO_RESPONSE);
         this.coordinator = coordinator;
-        this.timestamp = timestamp;
         this.parent = parent;
     }
 
@@ -24,14 +23,6 @@ public class HelloResponseMessage extends EdgeNetworkMessage {
 
     public EdgeNodeRepresentation getCoordinator() {
         return coordinator;
-    }
-
-    public long getTimestamp() {
-        return timestamp;
-    }
-
-    public void setTimestamp(long timestamp) {
-        this.timestamp = timestamp;
     }
 
     public EdgeNodeRepresentation getParent() {

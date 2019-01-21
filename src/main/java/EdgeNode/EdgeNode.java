@@ -193,7 +193,6 @@ public class EdgeNode{
         WebResource webResource = client.resource("http://localhost:4242/edgenetwork/nodes/"+this.nodeId);
         webResource.type("application/json").delete(ClientResponse.class);
 
-        stateModel.shutdown = true;
         stopSensorsCommunication();
         stopInternalNodeWork();
         stopEdgeNetworkCommunication();
@@ -390,7 +389,10 @@ public class EdgeNode{
         synchronized (stateModel.networkTreeLock){
 
             //Rimuove eventuali zombie
-            stateModel.networkTree.removeNode(node);
+            NetworkTreeNode networkTreeNode = stateModel.networkTree.findNode(node);
+            if(networkTreeNode != null)
+                stateModel.networkTree.removeNode(networkTreeNode);
+
             NetworkTreeNode parent = stateModel.networkTree.addNode(node);
             parentEdgeNode = parent.getEdgeNode();
             helloResponseJson = gson.toJson(new HelloResponseMessage(this.getRepresentation(), stateModel.getLastElectionTimestamp(), parentEdgeNode));
@@ -410,8 +412,9 @@ public class EdgeNode{
         stateModel.edgeNetworkSocket.write(new DatagramPacket(helloResponseJson.getBytes(), helloResponseJson.length(), new InetSocketAddress(node.getIpAddr(), node.getNodesPort())));
 
         //DEBUG
-        System.out.println("DEBUG - Albero dopo inserimento nodo nuovo");
+        System.out.println("\nDEBUG - Albero dopo inserimento nodo nuovo "+node.getNodeId());
         stateModel.networkTree.printTree();
+        System.out.println();
 
     }
 
@@ -441,20 +444,22 @@ public class EdgeNode{
             // Toglie il deadParent dall'albero (questo può portare ad una demozione di un nodo da nodo interno a foglia)
             // e si rimuove dalla lista dei figli del padre
             if(networkTreeNode.getParent() != null) {
-                grandparent = stateModel.networkTree.removeNode(networkTreeNode.getParent().getEdgeNode());
+                grandparent = networkTreeNode.getParent().getParent();
                 networkTreeNode.getParent().getChildren().remove(networkTreeNode);
+                stateModel.networkTree.removeNode(networkTreeNode.getParent());
             }
 
             //DEBUG
-            System.out.println("DEBUG - Albero dopo rimozione");
+            System.out.println("\nDEBUG - Albero dopo rimozione");
             stateModel.networkTree.printTree();
 
             // Aggiunge il NetworkTreeNode di node all'albero
             NetworkTreeNode newParent = stateModel.networkTree.addNode(networkTreeNode);
 
             //DEBUG
-            System.out.println("DEBUG - Albero dopo aggiunta");
+            System.out.println("\nDEBUG - Albero dopo aggiunta");
             stateModel.networkTree.printTree();
+            System.out.println();
 
             // Messaggio di parentUpdate per node
             parentUpdateJson = gson.toJson(new TreeMessage(TreeMessage.TreeMessageType.PARENT_UPDATE, newParent.getEdgeNode()));
@@ -463,7 +468,7 @@ public class EdgeNode{
             if(newParent != grandparent){
                 // Se grandparent non ha più figli lo faccio diventare una foglia
                 if(grandparent != null && grandparent.getChildren().size() == 0){
-                    grandparentDemotionJson = gson.toJson(new TreeMessage(TreeMessage.TreeMessageType.LEAF, grandparent.getParent().getEdgeNode()));
+                    grandparentDemotionJson = gson.toJson(new TreeMessage(TreeMessage.TreeMessageType.LEAF, null));
                     grandparentEdgenode = grandparent.getEdgeNode();
                 }
                 // Se newParent ha un figlio solo vuol dire che l'ho appena promosso

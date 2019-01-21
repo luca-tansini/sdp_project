@@ -51,6 +51,19 @@ public class InternalNodeThread extends Thread{
                 HashMap<String,Long> sentPartialMeanTimestamps = new HashMap<>();
 
                 while(true){
+
+                    EdgeNodeRepresentation parent = stateModel.getNetworkTreeParent();
+
+                    // Manda i pacchetti arretrati (prima di dormire)
+                    if(cached != null && parent != null){
+                        // Aspetta un secondo a mandare il pacchetto cachato per dare tempo al parent
+                        // di far partire l'InternalNodeThread nel caso sia stato appena promosso
+                        try{Thread.sleep(1000);} catch (InterruptedException e){e.printStackTrace();}
+                        String tmp = cached;
+                        cached = null;
+                        sendMeasurement(parent, tmp);
+                    }
+
                     synchronized (childLock){
                         try {
                             childLock.wait(5000);
@@ -59,15 +72,6 @@ public class InternalNodeThread extends Thread{
                         }
                     }
                     if(!stateModel.isInternalNode) break;
-
-                    EdgeNodeRepresentation parent = stateModel.getNetworkTreeParent();
-
-                    // Manda i pacchetti arretrati
-                    if(cached != null && parent != null){
-                        String tmp = cached;
-                        cached = null;
-                        sendMeasurement(parent, tmp);
-                    }
 
                     HashMap<String, Measurement> statsLocal = new HashMap<>();
                     Measurement partialMean = null;
@@ -102,10 +106,6 @@ public class InternalNodeThread extends Thread{
 
                     //Invia gli update al parent (solo se ha qualcosa di nuovo) (se ho delle nuove statsLocal ho di sicuro ricalcolato la media)
                     if(statsLocal.size() > 0) {
-
-                        if(partialMean == null) System.out.println("DEBUG: InternalNodeThread - Mi sbagliavo, partialMean poteva essere null");
-
-
                         ParentMessage parentMessage = new ParentMessage(ParentMessage.ParentMessageType.STATS_UPDATE, stateModel.edgeNode.getRepresentation(), partialMean, statsLocal);
                         String json = gson.toJson(parentMessage);
 
@@ -154,8 +154,8 @@ public class InternalNodeThread extends Thread{
         }
         if(stateModel.isAwaitingParentACK() && stateModel.sensorCommunicationOnline){
             System.out.println("DEBUG: InternalNodeThread - Il parent è morto!");
-            stateModel.setAwaitingParentACK(false);
             stateModel.setNetworkTreeParent(null);
+            stateModel.setAwaitingParentACK(false);
             stateModel.nodes.remove(parent);
             cached = json;
 
@@ -170,14 +170,32 @@ public class InternalNodeThread extends Thread{
                 System.out.println("DEBUG: InternalNodeThread - il mio parent era anche il coordinatore, faccio partire elezioni");
                 stateModel.edgeNode.bullyElection();
             }
-            //Altrimenti comunica al coordinatore che è morto il parent (se c'è un coordinatore, altrimenti c'è un'elezione in corso)
-            else {
-                if (stateModel.getCoordinator() != null) {
-                    String parentDownJson = gson.toJson(new TreeMessage(TreeMessage.TreeMessageType.PARENT_DOWN, parent, stateModel.edgeNode.getRepresentation()));
-                    stateModel.edgeNetworkSocket.write(new DatagramPacket(parentDownJson.getBytes(), parentDownJson.length(), new InetSocketAddress(stateModel.getCoordinator().getIpAddr(), stateModel.getCoordinator().getNodesPort())));
+            //Altrimenti comunica al coordinatore che è morto il parent
+            else{
+                String parentDownJson = gson.toJson(new TreeMessage(TreeMessage.TreeMessageType.PARENT_DOWN, parent, stateModel.edgeNode.getRepresentation()));
+                stateModel.edgeNetworkSocket.write(new DatagramPacket(parentDownJson.getBytes(), parentDownJson.length(), new InetSocketAddress(stateModel.getCoordinator().getIpAddr(), stateModel.getCoordinator().getNodesPort())));
+                // Devo controllare che anche il coordinatore non sia morto, perchè
+                // nel caso in cui mio padre sia morto subito prima del coordinatore potrei finire in deadlock
+                synchronized (stateModel.coordinatorACKLock) {
+                    stateModel.setAwaitingCoordinatorACK(true);
+                    try {
+                        stateModel.coordinatorACKLock.wait(5000);
+                    } catch (InterruptedException e) {e.printStackTrace();}
+                }
+                if(stateModel.isAwaitingCoordinatorACK()){
+                    System.out.print("DEBUG: InternalNodeThread - Anche il coordinatore è morto");
+                    stateModel.setCoordinator(null);
+                    synchronized (stateModel.electionStatusLock){
+                        if(stateModel.electionStatus != FINISHED) {
+                            System.out.println(", ma ho già delle elezioni in corso");
+                            return;
+                        }
+                        stateModel.electionStatus = STARTED;
+                    }
+                    System.out.println(", faccio partire elezioni");
+                    stateModel.edgeNode.bullyElection();
                 }
             }
         }
     }
-
 }

@@ -93,7 +93,6 @@ public class CoordinatorThread extends InternalNodeThread{
                     if(statsLocal.size() > 0) {
                         Statistics stats = new Statistics();
                         stats.setLocal(statsLocal);
-                        if(global == null) System.out.println("DEBUG: CoordinatorThread - Mi sbagliavo, global poteva essere null");
                         stats.setGlobal(global);
                         String json = gson.toJson(stats);
                         Client client = Client.create();

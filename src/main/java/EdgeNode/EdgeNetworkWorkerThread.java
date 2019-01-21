@@ -64,7 +64,7 @@ public class EdgeNetworkWorkerThread extends Thread {
         if(!stateModel.nodes.contains(requestingNode))
             stateModel.nodes.add(requestingNode);
         else{
-            //Caso limite in cui qualcuno è morto e risorto prima che me ne rendessi conto
+            //Caso limite in cui qualcuno è morto e tornato online prima che me ne rendessi conto
             stateModel.nodes.addSafety(requestingNode);
         }
         if(stateModel.edgeNode.isCoordinator()) {
@@ -77,10 +77,9 @@ public class EdgeNetworkWorkerThread extends Thread {
     private void handleHelloResponse(String msg){
         System.out.println("DEBUG: EdgeNetworkWorkerThread - HelloResponse LEAF");
         HelloResponseMessage coordResponseMessage = gson.fromJson(msg, HelloResponseMessage.class);
-        EdgeNodeRepresentation coord = coordResponseMessage.getCoordinator();
-        //Si segna chi sono il edgeNode e il coordinatore e fa partire la comunicazione con i sensori
+        //Si segna chi sono il edgeNode e il coordinatore
         stateModel.setNetworkTreeParent(coordResponseMessage.getParent());
-        stateModel.setCoordinator(coord);
+        stateModel.setCoordinator(coordResponseMessage.getCoordinator());
         synchronized (stateModel.helloSequenceLock) {
             stateModel.helloSequenceLock.notify();
         }
@@ -119,6 +118,7 @@ public class EdgeNetworkWorkerThread extends Thread {
                 stateModel.setAwaitingParentACK(false);
                 stateModel.setNetworkTreeParent(null);
                 stateModel.nodes.remove(stateModel.getCoordinator());
+                stateModel.setAwaitingCoordinatorACK(false);
                 stateModel.setCoordinator(null);
                 new Thread(new Runnable() {
                     @Override
@@ -130,7 +130,6 @@ public class EdgeNetworkWorkerThread extends Thread {
 
             //Quando ricevo un pacchetto ACK, mi metto in stato TAKEN_CARE, se non lo ero già.
             case ALIVE_ACK:
-                System.out.print("DEBUG: EdgeNetworkWorkerThread - got ALIVE_ACK from: "+sender.getNodeId());
                 synchronized (stateModel.electionStatusLock) {
                     if (stateModel.electionStatus != StateModel.ElectionStatus.STARTED)
                         break;
@@ -151,6 +150,7 @@ public class EdgeNetworkWorkerThread extends Thread {
                 synchronized (stateModel.electionStatusLock){
                     stateModel.electionStatus = StateModel.ElectionStatus.FINISHED;
                 }
+                stateModel.setAwaitingCoordinatorACK(false);
                 stateModel.setCoordinator(sender);
                 stateModel.setLastElectionTimestamp(electionMesssage.getTimestamp());
                 synchronized (stateModel.electionLock){
@@ -193,8 +193,10 @@ public class EdgeNetworkWorkerThread extends Thread {
 
             case LEAF:
                 System.out.println("DEBUG: EdgeNetworkWorkerThread - LEAF");
-                stateModel.setAwaitingParentACK(false);
-                stateModel.setNetworkTreeParent(treeMessage.getParent());
+                if(treeMessage.getParent() != null) {
+                    stateModel.setAwaitingParentACK(false);
+                    stateModel.setNetworkTreeParent(treeMessage.getParent());
+                }
                 stateModel.edgeNode.stopInternalNodeWork();
                 break;
 
@@ -217,6 +219,7 @@ public class EdgeNetworkWorkerThread extends Thread {
             case PARENT_UPDATE:
                 System.out.println("DEBUG: EdgeNetworkWorkerThread - PARENT UPDATE");
                 stateModel.setAwaitingParentACK(false);
+                stateModel.setAwaitingCoordinatorACK(false);
                 stateModel.setNetworkTreeParent(treeMessage.getParent());
                 break;
         }
