@@ -111,7 +111,7 @@ public class EdgeNode{
 
         // Se è l'unico nodo si proclama coordinatore
         if(stateModel.nodes.size() == 0){
-            System.out.println("self proclaimed coordinator");
+            System.out.println("DEBUG: EdgeNode - self proclaimed coordinator");
             stateModel.setLastElectionTimestamp(Instant.now().toEpochMilli());
             startCoordinatorWork();
         }
@@ -147,8 +147,6 @@ public class EdgeNode{
             System.out.println("DEBUG: EdgeNode - got coordinator info: "+stateModel.getCoordinator());
         }
         else{
-            // TODO: CRITICAL - Se prima di entrare nell'else vengo schedulato fuori e ricevo un pacchetto victory
-            //       rischio di far partire un'elezione con il coordinatore vivo
             synchronized (stateModel.electionStatusLock) {
                 if (stateModel.electionStatus != StateModel.ElectionStatus.FINISHED) {
                     //Sono stato coinvolto in un'elezione
@@ -354,9 +352,6 @@ public class EdgeNode{
         synchronized (stateModel.networkTreeLock) {
             stateModel.networkTree = buildNetworkTree();
             nodes = stateModel.networkTree.toList();
-            // DEBUG
-            System.out.println("DEBUG - Albero appena costruito");
-            stateModel.networkTree.printTree();
         }
 
         // Comunica ai nodi il loro ruolo nell'albero e il padre
@@ -423,11 +418,6 @@ public class EdgeNode{
         // Comunica al nodo nuovo il ruolo di foglia nell'albero
         stateModel.edgeNetworkSocket.write(new DatagramPacket(helloResponseJson.getBytes(), helloResponseJson.length(), new InetSocketAddress(node.getIpAddr(), node.getNodesPort())));
 
-        //DEBUG
-        System.out.println("\nDEBUG - Albero dopo inserimento nodo nuovo "+node.getNodeId());
-        stateModel.networkTree.printTree();
-        System.out.println();
-
     }
 
 
@@ -462,17 +452,8 @@ public class EdgeNode{
                 stateModel.networkTree.removeNode(networkTreeNode.getParent());
             }
 
-            //DEBUG
-            System.out.println("\nDEBUG - Albero dopo rimozione");
-            stateModel.networkTree.printTree();
-
             // Aggiunge il NetworkTreeNode di node all'albero
             NetworkTreeNode newParent = stateModel.networkTree.addNode(networkTreeNode);
-
-            //DEBUG
-            System.out.println("\nDEBUG - Albero dopo aggiunta");
-            stateModel.networkTree.printTree();
-            System.out.println();
 
             // Messaggio di parentUpdate per node
             parentUpdateJson = gson.toJson(new TreeMessage(TreeMessage.TreeMessageType.PARENT_UPDATE, newParent.getEdgeNode()));
