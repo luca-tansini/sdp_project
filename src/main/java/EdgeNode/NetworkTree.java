@@ -105,7 +105,7 @@ public class NetworkTree{
         return findNode(root, node);
     }
 
-    //Visita DFS per trovare un nodo specifico
+    // Visita DFS per trovare un nodo specifico
     public NetworkTreeNode findNode(NetworkTreeNode ntn, EdgeNodeRepresentation node){
         if(ntn.getEdgeNode().equals(node))
             return ntn;
@@ -116,17 +116,17 @@ public class NetworkTree{
         return null;
     }
 
-    //Visita DFS per ritornare lista di nodi
+    // toList utilizza una visita BFS per costruire una lista di nodi ordinata per livello
     public ArrayList<NetworkTreeNode> toList(){
-        ArrayList<NetworkTreeNode> list = new ArrayList<>();
-        toList(root,list);
-        return list;
-    }
-
-    public void toList(NetworkTreeNode ntn, ArrayList<NetworkTreeNode> list){
-        list.add(ntn);
-        for(NetworkTreeNode child: ntn.getChildren())
-            toList(child, list);
+        ArrayList<NetworkTreeNode> out = new ArrayList<>();
+        ArrayList<NetworkTreeNode> queue = new ArrayList<>();
+        queue.add(root);
+        while(!queue.isEmpty()){
+            NetworkTreeNode ntn = queue.remove(0);
+            out.add(ntn);
+            queue.addAll(ntn.getChildren());
+        }
+        return out;
     }
 
     public void printTree(){

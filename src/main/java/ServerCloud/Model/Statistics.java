@@ -43,8 +43,8 @@ public class Statistics {
             out +="\n";
         out += "    Local:\n";
         for(String id: local.keySet()){
-            if(local.get(id).getTimestamp() < (timestamp - EXPIRY_OFFSET))
-            out += "        "+id+": "+ local.get(id)+"\n";
+            if(local.get(id).getTimestamp() >= (timestamp - EXPIRY_OFFSET))
+                out += "        "+id+": "+ local.get(id)+"\n";
         }
         return out;
     }

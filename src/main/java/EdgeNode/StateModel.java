@@ -105,8 +105,20 @@ public class StateModel {
     //Gestione del comportamento da nodo interno
     public InternalNodeThread internalNodeThread;
     public SharedBuffer<ParentMessage> internalNodeBuffer;
-    public volatile boolean isInternalNode = false;
+    private boolean isInternalNode = false;
+    public final Object internalNodeLock = new Object();
 
+    public boolean isInternalNode() {
+        synchronized (internalNodeLock) {
+            return isInternalNode;
+        }
+    }
+
+    public void setInternalNode(boolean internalNode) {
+        synchronized (internalNodeLock) {
+            isInternalNode = internalNode;
+        }
+    }
 
     //Gestione dei thread che mandano update al parent
     public ParentUpdatesThread parentUpdatesThread;
@@ -137,10 +149,10 @@ public class StateModel {
         }
     }
 
-    public void setAwaitingCoordinatorACK(boolean awaitingCordinatorACK) {
+    public void setAwaitingCoordinatorACK(boolean awaitingCoordinatorACK) {
         synchronized (coordinatorACKLock) {
-            this.awaitingCoordinatorACK = awaitingCordinatorACK;
-            if(awaitingCordinatorACK == false)
+            this.awaitingCoordinatorACK = awaitingCoordinatorACK;
+            if(awaitingCoordinatorACK == false)
                 coordinatorACKLock.notify();
         }
     }

@@ -55,7 +55,7 @@ public class CoordinatorThread extends InternalNodeThread{
                             e.printStackTrace();
                         }
                     }
-                    if(!stateModel.isInternalNode) break;
+                    if(!stateModel.isInternalNode()) break;
 
                     HashMap<String, Measurement> statsLocal = new HashMap<>();
                     Measurement global = null;
@@ -104,7 +104,7 @@ public class CoordinatorThread extends InternalNodeThread{
         }).start();
 
         //Legge gli update e risponde
-        while (stateModel.isInternalNode){
+        while (stateModel.isInternalNode()){
             ParentMessage msg = stateModel.internalNodeBuffer.take();
             if(msg.getParentMessageType() == ParentMessage.ParentMessageType.QUIT) {
                 synchronized (childLock){
@@ -124,6 +124,8 @@ public class CoordinatorThread extends InternalNodeThread{
                 stateModel.partialMean.put(msg.getMeasurement().getId(),msg.getMeasurement());
                 if(msg.getLocal() != null)
                     stateModel.stats.getLocal().putAll(msg.getLocal());
+                else
+                    stateModel.stats.getLocal().put(msg.getMeasurement().getId(),msg.getMeasurement());
             }
         }
     }

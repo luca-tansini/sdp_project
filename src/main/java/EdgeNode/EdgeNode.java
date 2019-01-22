@@ -42,8 +42,6 @@ public class EdgeNode{
         this.nodesPort = nodesPort;
         this.stateModel = StateModel.getInstance();
         this.stateModel.edgeNode = this;
-        //Fa partire subito la comunicazione coi sensori
-        startSensorsCommunication();
     }
 
     public EdgeNode(EdgeNodeRepresentation repr) {
@@ -59,21 +57,25 @@ public class EdgeNode{
      */
     public static void main(String[] args){
 
-        if(args.length != 4){
-            System.out.println("usage: EdgeNode <nodeId> <ipAddr> <sensorsPort> <nodesPort>");
+        if(args.length != 6){
+            System.out.println("usage: EdgeNode <serverAddr> <serverPort> <nodeId> <ipAddr> <sensorsPort> <nodesPort>");
             return;
         }
 
-        int nodeId = Integer.parseInt(args[0]);
-        String ipAddr = args[1];
-        int sensorsPort = Integer.parseInt(args[2]);
-        int nodesPort = Integer.parseInt(args[3]);
+        String serverAddr = args[0];
+        String serverPort = args[1];
+        int nodeId = Integer.parseInt(args[2]);
+        String ipAddr = args[3];
+        int sensorsPort = Integer.parseInt(args[4]);
+        int nodesPort = Integer.parseInt(args[5]);
 
         EdgeNode node = new EdgeNode(null, nodeId, ipAddr, sensorsPort, nodesPort);
+        //Fa partire subito la comunicazione coi sensori
+        node.startSensorsCommunication();
 
         EdgeNodeRepresentation nodeRepr = new EdgeNodeRepresentation(new Position(0,0), nodeId, ipAddr, sensorsPort, nodesPort);
         Client client = Client.create();
-        WebResource webResource = client.resource("http://localhost:4242/edgenetwork/nodes");
+        WebResource webResource = client.resource("http://"+serverAddr+":"+serverPort+"/edgenetwork/nodes");
 
         Random rng = new Random();
         for(int i=0; i<10; i++){
@@ -107,24 +109,24 @@ public class EdgeNode{
 
         startEdgeNetworkCommunication();
 
-        //Se è l'unico nodo si proclama coordinatore
+        // Se è l'unico nodo si proclama coordinatore
         if(stateModel.nodes.size() == 0){
             System.out.println("self proclaimed coordinator");
             stateModel.setLastElectionTimestamp(Instant.now().toEpochMilli());
             startCoordinatorWork();
         }
-        //Altrimenti fa partire la helloSequence
+        // Altrimenti fa partire la helloSequence
         else{
             helloSequence();
         }
 
-        //Mostra il pannello
+        // Mostra il pannello
         showPanel();
     }
 
 
     private void helloSequence(){
-        //Mando pachetti HELLO a tutti gli altri nodi
+        // Mando pachetti HELLO a tutti gli altri nodi
         for(EdgeNodeRepresentation node: stateModel.nodes){
             String request = gson.toJson(new HelloMessage(this.getRepresentation()));
             DatagramPacket packet = new DatagramPacket(request.getBytes(), request.length(), new InetSocketAddress(node.getIpAddr(), node.getNodesPort()));
@@ -141,16 +143,18 @@ public class EdgeNode{
             }
         }
         if(stateModel.getCoordinator() != null){
-            //Qualcuno mi ha risposto con un pacchetto HELLO_RESPONSE
+            // Qualcuno mi ha risposto con un pacchetto HELLO_RESPONSE o VICTORY, o ho vinto io un'elezione in cui sono stato coinvolto
             System.out.println("DEBUG: EdgeNode - got coordinator info: "+stateModel.getCoordinator());
         }
         else{
+            // TODO: CRITICAL - Se prima di entrare nell'else vengo schedulato fuori e ricevo un pacchetto victory
+            //       rischio di far partire un'elezione con il coordinatore vivo
             synchronized (stateModel.electionStatusLock) {
                 if (stateModel.electionStatus != StateModel.ElectionStatus.FINISHED) {
                     //Sono stato coinvolto in un'elezione
                     return;
                 }
-                //Non ho ricevuto niente da nessuno, faccio partire una mia elezione, alla peggio contatto nodi già in un'elezione e mi manderanno un ACK
+                // Non ho ricevuto niente da nessuno, faccio partire una mia elezione, alla peggio contatto nodi già in un'elezione e mi manderanno un ACK
                 stateModel.electionStatus = StateModel.ElectionStatus.STARTED;
             }
             bullyElection();
@@ -171,8 +175,10 @@ public class EdgeNode{
             if (isCoordinator()) {
                 System.out.print(" (coordinatore)");
             }
-            else
-                System.out.print(" (parent:"+stateModel.getNetworkTreeParent().getNodeId()+")");
+            else {
+                String parentRepr = stateModel.getNetworkTreeParent() == null ? "null" : ""+stateModel.getNetworkTreeParent().getNodeId();
+                System.out.print(" (parent:" + parentRepr + ")");
+            }
             System.out.println("\n");
 
             //Stampa le statistiche immagazzinate
@@ -220,7 +226,6 @@ public class EdgeNode{
             stateModel.edgeNetworkThreadPool[i] = new EdgeNetworkWorkerThread();
             stateModel.edgeNetworkThreadPool[i].start();
         }
-
     }
 
     private void stopEdgeNetworkCommunication(){
@@ -242,8 +247,8 @@ public class EdgeNode{
 
     /*
      * Crea il buffer per accumulare le statistiche
-     * Crea il server grpc che riceve gli stream dai sensori
      * Lancia il thread per mandare i dati al coordinatore
+     * Crea il server grpc che riceve gli stream dai sensori
      */
     protected void startSensorsCommunication(){
 
@@ -255,6 +260,9 @@ public class EdgeNode{
             stateModel.sensorCommunicationOnline = true;
             stateModel.sensorsMeasurementBuffer = new SharedBuffer<Measurement>();
 
+            stateModel.parentUpdatesThread = new ParentUpdatesThread();
+            stateModel.parentUpdatesThread.start();
+
             stateModel.gRPCServer = ServerBuilder.forPort(this.sensorsPort).addService(new SensorsGRPCInterfaceImpl()).build();
             try {
                 stateModel.gRPCServer.start();
@@ -262,8 +270,6 @@ public class EdgeNode{
                 e.printStackTrace();
             }
 
-            stateModel.parentUpdatesThread = new ParentUpdatesThread();
-            stateModel.parentUpdatesThread.start();
         }
     }
 
@@ -291,30 +297,34 @@ public class EdgeNode{
     */
     protected void startInternalNodeWork(){
 
-        if(!stateModel.isInternalNode) {
+        synchronized (stateModel.internalNodeLock) {
+            if (!stateModel.isInternalNode()) {
 
-            System.out.println("DEBUG: EdgeNode - starting internal node work");
+                System.out.println("DEBUG: EdgeNode - starting internal node work");
 
-            stateModel.isInternalNode = true;
-            stateModel.partialMean = new HashMap<>();
-            stateModel.internalNodeBuffer = new SharedBuffer<ParentMessage>();
-            stateModel.internalNodeThread = new InternalNodeThread();
-            stateModel.internalNodeThread.start();
+                stateModel.setInternalNode(true);
+                stateModel.partialMean = new HashMap<>();
+                stateModel.internalNodeBuffer = new SharedBuffer<ParentMessage>();
+                stateModel.internalNodeThread = new InternalNodeThread();
+                stateModel.internalNodeThread.start();
+            }
         }
     }
 
     protected void stopInternalNodeWork(){
 
-        if(stateModel.isInternalNode) {
+        synchronized (stateModel.internalNodeLock) {
+            if (stateModel.isInternalNode()) {
 
-            System.out.println("DEBUG: EdgeNode - stopping internal node work");
+                System.out.println("DEBUG: EdgeNode - stopping internal node work");
 
-            stateModel.isInternalNode = false;
-            stateModel.internalNodeBuffer.put(new ParentMessage(ParentMessage.ParentMessageType.QUIT, null, null));
-            try {
-                stateModel.internalNodeThread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+                stateModel.setInternalNode(false);
+                stateModel.internalNodeBuffer.put(new ParentMessage(ParentMessage.ParentMessageType.QUIT, null, null));
+                try {
+                    stateModel.internalNodeThread.join();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
             }
         }
     }
@@ -330,26 +340,28 @@ public class EdgeNode{
         System.out.println("DEBUG: EdgeNode - starting coordinator work");
 
         stateModel.setCoordinator(this.getRepresentation());
-        stopInternalNodeWork();
-        stateModel.isInternalNode = true;
-        stateModel.partialMean = new HashMap<>();
-        stateModel.internalNodeBuffer = new SharedBuffer<ParentMessage>();
-        stateModel.internalNodeThread = new CoordinatorThread();
-        stateModel.internalNodeThread.start();
+        synchronized (stateModel.internalNodeLock) {
+            stopInternalNodeWork();
+            stateModel.setInternalNode(true);
+            stateModel.partialMean = new HashMap<>();
+            stateModel.internalNodeBuffer = new SharedBuffer<ParentMessage>();
+            stateModel.internalNodeThread = new CoordinatorThread();
+            stateModel.internalNodeThread.start();
+        }
 
         ArrayList<NetworkTreeNode> nodes;
-        //Costruisce l'albero dei nodi edge
+        // Costruisce l'albero dei nodi edge
         synchronized (stateModel.networkTreeLock) {
             stateModel.networkTree = buildNetworkTree();
             nodes = stateModel.networkTree.toList();
-
-            //DEBUG
+            // DEBUG
             System.out.println("DEBUG - Albero appena costruito");
             stateModel.networkTree.printTree();
-
         }
 
-        //Comunica a nodi il loro ruolo nell'albero e il padre
+        // Comunica ai nodi il loro ruolo nell'albero e il padre
+        // toList garantisce che la lista sia ordinata per livello
+        // così da notificare i padri prima dei figli
         for(NetworkTreeNode ntn: nodes){
             if(ntn.isRoot()) continue;
             if(ntn.isLeaf()) {
@@ -388,7 +400,7 @@ public class EdgeNode{
 
         synchronized (stateModel.networkTreeLock){
 
-            //Rimuove eventuali zombie
+            // Rimuove eventuali zombie
             NetworkTreeNode networkTreeNode = stateModel.networkTree.findNode(node);
             if(networkTreeNode != null)
                 stateModel.networkTree.removeNode(networkTreeNode);
@@ -396,9 +408,9 @@ public class EdgeNode{
             NetworkTreeNode parent = stateModel.networkTree.addNode(node);
             parentEdgeNode = parent.getEdgeNode();
             helloResponseJson = gson.toJson(new HelloResponseMessage(this.getRepresentation(), stateModel.getLastElectionTimestamp(), parentEdgeNode));
-            //Se il parent ha un figlio solo vuol dire che l'ho appena promosso
+            // Se il parent ha un figlio solo vuol dire che l'ho appena promosso
             if(!parent.isRoot() && parent.getChildren().size() == 1) {
-                //Mando parent null tanto non sto cambiando il padre
+                // Mando parent null tanto non sto cambiando il padre
                 parentPromotionJson = gson.toJson(new TreeMessage(TreeMessage.TreeMessageType.INTERNAL, null));
             }
         }
@@ -441,8 +453,9 @@ public class EdgeNode{
             // Prende un riferimento al nodo dell'albero di node (per non perdere il sottoalbero)
             NetworkTreeNode networkTreeNode = stateModel.networkTree.findNode(node);
 
-            // Toglie il deadParent dall'albero (questo può portare ad una demozione di un nodo da nodo interno a foglia)
-            // e si rimuove dalla lista dei figli del padre
+            // Si segna il grandparent di node prima di perderne il riferimento
+            // Rimuove node dalla lista dei figli del padre
+            // Toglie il deadParent dall'albero (questo può portare ad una demozione del grandparent da nodo interno a foglia)
             if(networkTreeNode.getParent() != null) {
                 grandparent = networkTreeNode.getParent().getParent();
                 networkTreeNode.getParent().getChildren().remove(networkTreeNode);
@@ -466,8 +479,8 @@ public class EdgeNode{
 
             // Se newParent e grandparent sono lo stesso nodo non devo fare nulla di più
             if(newParent != grandparent){
-                // Se grandparent non ha più figli lo faccio diventare una foglia
-                if(grandparent != null && grandparent.getChildren().size() == 0){
+                // Se grandparent non ha più figli (e non è la root, quindi non sono io coordinatore) lo faccio diventare una foglia
+                if(grandparent != null && grandparent.getChildren().size() == 0 && !grandparent.isRoot()){
                     grandparentDemotionJson = gson.toJson(new TreeMessage(TreeMessage.TreeMessageType.LEAF, null));
                     grandparentEdgenode = grandparent.getEdgeNode();
                 }
@@ -500,7 +513,6 @@ public class EdgeNode{
      */
     protected void bullyElection(){
 
-        boolean failed = false;
         ArrayList<EdgeNodeRepresentation> higherId = new ArrayList<>();
 
         // Prepara un messaggio di HELLO_ELECTION
@@ -521,9 +533,6 @@ public class EdgeNode{
             }
             stateModel.setCoordinator(this.getRepresentation());
 
-            //Lancia il thread per il lavoro da coordinatore
-            this.startCoordinatorWork();
-
             //Manda in giro pacchetti VICTORY
             ElectionMesssage victory = new ElectionMesssage(ElectionMesssage.ElectionMessageType.VICTORY, this.getRepresentation());
             String victoryMsg = gson.toJson(victory);
@@ -531,22 +540,30 @@ public class EdgeNode{
                 stateModel.edgeNetworkSocket.write(new DatagramPacket(victoryMsg.getBytes(), victoryMsg.length(), new InetSocketAddress(e.getIpAddr(), e.getNodesPort())));
             }
 
+            //Lancia il thread per il lavoro da coordinatore
+            this.startCoordinatorWork();
+
             stateModel.setLastElectionTimestamp(victory.getTimestamp());
 
             synchronized (stateModel.electionStatusLock){
                 stateModel.electionStatus = StateModel.ElectionStatus.FINISHED;
             }
+            //gestione della helloSequence
+            synchronized (stateModel.helloSequenceLock) {
+                stateModel.helloSequenceLock.notify();
+            }
 
             return;
         }
         else{
+            boolean failed = false;
             //Aspetto 2 secondi
             try {
                 synchronized (stateModel.electionLock){
                     stateModel.electionLock.wait(2000);
                 }} catch (InterruptedException e) { e.printStackTrace();}
-
             synchronized (stateModel.electionStatusLock){
+
                 //Se l'elezione è finita ho ricevuto un VICTORY packet e qualcuno sarà il coordinatore
                 if(stateModel.electionStatus == StateModel.ElectionStatus.FINISHED) {
                     return;

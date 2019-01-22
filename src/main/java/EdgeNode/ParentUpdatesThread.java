@@ -46,7 +46,7 @@ public class ParentUpdatesThread extends Thread {
 
             EdgeNodeRepresentation parent = stateModel.getNetworkTreeParent();
 
-            if(stateModel.isInternalNode && cached != null) {
+            if(stateModel.isInternalNode() && cached != null) {
                 synchronized (stateModel.statsLock){
                     ParentMessage msg = gson.fromJson(cached, ParentMessage.class);
                     stateModel.partialMean.put(msg.getMeasurement().getId(),msg.getMeasurement());
@@ -78,13 +78,13 @@ public class ParentUpdatesThread extends Thread {
                     stateModel.stats.getLocal().put(measurement.getId(),measurement);
                     // Se sono un nodo interno metto la media locale in partialMean
                     // così verrà usata da InternalNodeThread per calcolare la media successiva
-                    if(stateModel.isInternalNode)
+                    if(stateModel.isInternalNode())
                         stateModel.partialMean.put(measurement.getId(), measurement);
                 }
 
                 // Se non sono un nodo interno mando le statistiche al parent via rete
-                if(!stateModel.isInternalNode){
-                    ParentMessage msg = new ParentMessage(ParentMessage.ParentMessageType.STATS_UPDATE, stateModel.edgeNode.getRepresentation(), measurement, stateModel.stats.getLocal());
+                if(!stateModel.isInternalNode()){
+                    ParentMessage msg = new ParentMessage(ParentMessage.ParentMessageType.STATS_UPDATE, stateModel.edgeNode.getRepresentation(), measurement, null);
                     String json = gson.toJson(msg);
                     if (parent != null) {
                         sendMeasurement(parent, json);
@@ -94,7 +94,7 @@ public class ParentUpdatesThread extends Thread {
                     }
                 }
 
-                //Sliding window, 50% overlap
+                // Sliding window, 50% overlap
                 for(int i=0; i<20; i++)
                     buffer.remove(0);
 
@@ -116,7 +116,7 @@ public class ParentUpdatesThread extends Thread {
             stateModel.nodes.remove(parent);
             cached = json;
 
-            //Se il mio parent era anche il coordinatore fccio partire elezioni
+            // Se il mio parent era anche il coordinatore faccio partire elezioni
             if(parent.equals(stateModel.getCoordinator())){
                 stateModel.setCoordinator(null);
                 synchronized (stateModel.electionStatusLock){

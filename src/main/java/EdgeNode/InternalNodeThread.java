@@ -71,7 +71,7 @@ public class InternalNodeThread extends Thread{
                             e.printStackTrace();
                         }
                     }
-                    if(!stateModel.isInternalNode) break;
+                    if(!stateModel.isInternalNode()) break;
 
                     HashMap<String, Measurement> statsLocal = new HashMap<>();
                     Measurement partialMean = null;
@@ -121,7 +121,7 @@ public class InternalNodeThread extends Thread{
         }).start();
 
         //Legge gli update e risponde
-        while (stateModel.isInternalNode){
+        while (stateModel.isInternalNode()){
             ParentMessage msg = stateModel.internalNodeBuffer.take();
             if(msg.getParentMessageType() == ParentMessage.ParentMessageType.QUIT) {
                 synchronized (childLock){
@@ -141,6 +141,8 @@ public class InternalNodeThread extends Thread{
                 stateModel.partialMean.put(msg.getMeasurement().getId(),msg.getMeasurement());
                 if(msg.getLocal() != null)
                     stateModel.stats.getLocal().putAll(msg.getLocal());
+                else
+                    stateModel.stats.getLocal().put(msg.getMeasurement().getId(),msg.getMeasurement());
             }
         }
     }
